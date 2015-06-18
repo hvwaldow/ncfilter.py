@@ -17,8 +17,8 @@ Dominik Brunner, Empa, Switzerland
 ```bash
 compress_netcdf.py [-W] -i <infile> -o <outfile>
 ```
->-W : use this option if infile should be replaced by compressed outfile    
-    Option -o <outfile> will be ignored in this case.
->-i <infile> : the orginal non-compressed netcdf file
->-o <outfile>: the compressed netcdf file
+-W : use this option if infile should be replaced by compressed outfile    
+       Option -o <outfile> will be ignored in this case.    
+-i <infile>: the orginal non-compressed netcdf file    
+-o <outfile>: the compressed netcdf file    
 
