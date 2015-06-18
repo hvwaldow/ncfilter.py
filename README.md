@@ -1,8 +1,8 @@
 # compress_netcdf
 
 Compresses a netcdf file by first converting float32 or float64 type
-2D, 3D or 4D fields into short unsigned integers with offset and scaling factor and
-then compressing with zlib compression.
+2D, 3D or 4D fields into short unsigned integers with offset and scaling factor.
+Then compress with zlib compression.
 
 ## Author:
 
