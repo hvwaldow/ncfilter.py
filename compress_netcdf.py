@@ -1,82 +1,80 @@
 import sys
 import os
-import getopt as go
+import argparse
+import shutil
 import datetime
 import numpy as np
 from netCDF4 import Dataset
 
-
-def parse_cmd(arglist):
-    err = ''
-    try:
-        myopts, args = go.getopt(arglist, "i:o:W")
-    except go.GetoptError as e:
-        useexit(e.msg + "\n")
-    if len(myopts) == 0:
-        useexit('')
-    if len(args) > 0:
-        useexit("superfluous arguments: {}\n".format(args))
-    opts = zip(*myopts)[0]
-    if ('-i' not in opts) or ('-o') not in opts:
-        useexit("missing parameter\n")
-    fout = dict(myopts)['-o']
-    fin = dict(myopts)['-i']
-    overwrite = True if '-W' in opts else False
-    return((fin, fout, overwrite))
-
-
-def useexit(e):
-    print("Usage: {} [-W] -i infile -o outfile\n{}".format(sys.argv[0], e))
-    sys.exit(1)
-
-bla = '''
- 
-    # full path for input file
-    dir_in=os.path.dirname(fin)
-    fname=os.path.basename(fin)
-    if dir_in == '':
-        dir_in = os.getcwd()
-        fin = dir_in+os.sep+fname
-
-    # full path for output file
-    if overwrite:
-        fout = fin+'.tmp'
-    elif fout == '':
-        fout=dir_in+os.sep+'compress'+os.sep+fname
-
-    dir_out=os.path.dirname(fout)
-    if dir_out == '':
-        dir_out = os.getcwd()
-        fout = dir_out+os.sep+os.path.basename(fout)
-
-    print ("Input file : %s ; output file: %s" % (fin,fout) )
-
-    # check if input file and output directory exist
-    if not os.path.isfile(fin):
-        print('input file not found')
-        sys.exit(5)
-
-    if not os.path.isdir(dir_out):
-        print('generating directory '+dir_out)
-        os.mkdir(dir_out)
-
-    #############
-    # Constants #
-    #############
-
+class PackNetCDF(object):
+    def __init__(self):
+        self.fin, self.fout, self.overwrite = self.parse_cmd()
     # number of values 2 and 4 byte unsigned integers
-    outResolutionShort = 2.**16-1.
-    outResolutionLong = 2.**31-1. # for unknown reason 2**32 produces wrong results
+    outResolutionShort = 2.0**16 - 2
+    outResolutionLong = 2.0**32 - 2  # for unknown reason 2**32 produces wrong results
+                                     # try it anyways - hvw
 
     # coordinate variables to prevent from compression even if they are 2D
-    exclude = ('lon','lat','slon','slat','slonu','slatu','slonv','slatv',\
-               'time','time_bnds','rlon','rlat','level_bnds','level','levels')
+    exclude = ('lon', 'lat', 'slon', 'slat', 'slonu', 'slatu', 'slonv',
+               'slatv', 'time', 'time_bnds', 'rlon', 'rlat', 'level_bnds',
+               'level', 'levels')
+    
+    def parse_cmd(self):
+        parser = argparse.ArgumentParser(description='Compress a netcdf file by ' +
+        'first converting float32 and float64 type2D ,3D and 4D fields into ' +
+        'integers with offset and scaling factor and then compressing with zlib ' +
+        'compression.')
+        parser.add_argument('-o', dest='fout',
+                            help='compressed netcdf file', metavar='OUTFILE')
+        parser.add_argument('-W', default=False, action='store_true',
+                            dest='overwrite', help='replace input file, ' +
+                            'overrides -o option.')
+        parser.add_argument('fin', help='input file', metavar='INFILE')
+        args = vars(parser.parse_args())
+
+        # check input file
+        fin = os.path.realpath(args['fin'])
+        if not os.path.exists(fin):
+            parser.error('input file {} does not exist.'.format(fin))
+        dir_in = os.path.dirname(fin)
+
+        # check output file
+        if args['overwrite']:
+            fout = fin + '.tmp'
+        else:
+            try:
+                # output file specified
+                fout = os.path.realpath(args['fout'])
+                if not os.path.exists(os.path.dirname(fout)):
+                    parser.error('path to output file {} does not exist.'
+                                 .format(fout))
+            except AttributeError:
+                # no output file specified
+                dir_out = os.path.join(dir_in, 'compress')
+                if not os.path.exists(dir_out):
+                    print('creating {}'.format(dir_out))
+                    os.mkdir(dir_out)
+                fout = os.path.join(dir_out, os.path.basename(fin))
+        return((fin, fout, args['overwrite']))
+
+        def cp_input(self):
+            shutil.copy(self.fin, self.fout)
+        
+        # def mk_attributes(self):
+        #     dsout = Dataset(fout, 'w', format='NETCDF4')
+        #     datetime.datetime.now().ctime() + ': ' + 
+            
+            
+            
+
+
+ 
 
     ############################################################################
     # Open input and output files, then first copy dimensions and global
     # attributes and then copy variables in compressed form if possible
     ############################################################################
-
+bla = '''
     dsin=Dataset(fin, 'r', format='NETCDF4')
     dsout=Dataset(fout, 'w', format='NETCDF4')
 
@@ -181,5 +179,6 @@ bla = '''
 '''
 
 if __name__ == "__main__":
-    args = sys.argv[1:]
-    print(parse_cmd(args))
+    P = PackNetCDF()
+    print (P.fin, P.fout, P.overwrite)
+    print(P.outResolutionShort)
