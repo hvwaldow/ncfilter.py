@@ -1,43 +1,36 @@
-#!/usr/bin/env python
-
 import sys
 import os
-import getopt
+import getopt as go
 import datetime
 import numpy as np
 from netCDF4 import Dataset
 
-####################
-# Argument parsing #
-####################
- 
 
-    fin = ''
-    fout = ''
-    overwrite = False
-
+def parse_cmd(arglist):
+    err = ''
     try:
-        myopts, args = getopt.getopt(sys.argv[1:],"i:o:W")
-    except getopt.GetoptError as e:
-        print (str(e))
-        print("Usage: %s [-W] -i infile -o outfile" % sys.argv[0])
-        sys.exit(2)
+        myopts, args = go.getopt(arglist, "i:o:W")
+    except go.GetoptError as e:
+        useexit(e.msg + "\n")
+    if len(myopts) == 0:
+        useexit('')
+    if len(args) > 0:
+        useexit("superfluous arguments: {}\n".format(args))
+    opts = zip(*myopts)[0]
+    if ('-i' not in opts) or ('-o') not in opts:
+        useexit("missing parameter\n")
+    fout = dict(myopts)['-o']
+    fin = dict(myopts)['-i']
+    overwrite = True if '-W' in opts else False
+    return((fin, fout, overwrite))
 
-    for o, a in myopts:
-        if o == '-i':
-            fin=a
-        elif o == '-o':
-            fout=a
-        elif o == '-W':
-            overwrite = True
-        else:
-            print("Usage: %s [-W] -i infile -o outfile" % sys.argv[0])
-            sys.exit(3)
 
-    if fin == '':
-        print("Usage: %s [-W] -i infile -o outfile" % sys.argv[0])
-        sys.exit(4)
+def useexit(e):
+    print("Usage: {} [-W] -i infile -o outfile\n{}".format(sys.argv[0], e))
+    sys.exit(1)
 
+bla = '''
+ 
     # full path for input file
     dir_in=os.path.dirname(fin)
     fname=os.path.basename(fin)
@@ -185,6 +178,8 @@ from netCDF4 import Dataset
 
     if overwrite:
         os.rename(fout,fin)
+'''
 
 if __name__ == "__main__":
-    print "running"
+    args = sys.argv[1:]
+    print(parse_cmd(args))
