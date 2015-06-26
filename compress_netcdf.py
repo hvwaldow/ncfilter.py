@@ -6,19 +6,22 @@ import datetime
 import numpy as np
 from netCDF4 import Dataset
 
+
 class PackNetCDF(object):
     def __init__(self):
         self.fin, self.fout, self.overwrite = self.parse_cmd()
+        self.dsin = Dataset(self.fin, 'r')
+        self.dsout = Dataset(self.fout, 'w')
     # number of values 2 and 4 byte unsigned integers
     outResolutionShort = 2.0**16 - 2
     outResolutionLong = 2.0**32 - 2  # for unknown reason 2**32 produces wrong results
-                                     # try it anyways - hvw
+                                     # try it anyway - hvw
 
     # coordinate variables to prevent from compression even if they are 2D
     exclude = ('lon', 'lat', 'slon', 'slat', 'slonu', 'slatu', 'slonv',
                'slatv', 'time', 'time_bnds', 'rlon', 'rlat', 'level_bnds',
                'level', 'levels')
-    
+
     def parse_cmd(self):
         parser = argparse.ArgumentParser(description='Compress a netcdf file by ' +
         'first converting float32 and float64 type2D ,3D and 4D fields into ' +
@@ -57,8 +60,80 @@ class PackNetCDF(object):
                 fout = os.path.join(dir_out, os.path.basename(fin))
         return((fin, fout, args['overwrite']))
 
-        def cp_input(self):
-            shutil.copy(self.fin, self.fout)
+    def update_history_att(self):
+        thishistory = (datetime.datetime.now().ctime() +
+                       ': ' + ' '.join(sys.argv))
+        try:
+            newatt = "{}\n{}".format(thishistory, self.ds.getncattr('history'))
+            #  separating new entries with "\n" because there is an undocumented
+            #  feature in ncdump that will make it look like the attribute is an
+            #  array of strings, when in fact it is not.
+        except AttributeError:
+            newatt = thishistory
+        self.ds.setncattr('history', newatt)
+        return(newatt)
+
+    def select_vars(self):
+        '''Select variables that are going to be packed'''
+        v_sel = [x for x in self.ds.variables.iteritems()
+                 if (x[0] not in P.exclude) and
+                 (x[1].ndim >= 2) and
+                 (x[1].dtype in ['float64', 'float32', 'uint32', 'uint16'])]
+        self.selected_vars = v_sel
+
+    def compress(self, v):
+        # check range, computed offset and scaling, and check if variable is
+        # well behaved (short integer ok) or highly skewed (long integer necessary)
+        minVal = np.min(v[1][:])
+        maxVal = np.max(v[1][:])
+        meanVal = np.mean(v[1][:])
+        if np.min(meanVal - minVal,
+                  maxVal - meanVal) < (maxVal - minVal) / 1000:
+            intType = np.dtype('uint32')
+        else:
+            intType = np.dtype('uint16')
+        print("Packing variable {} [min:{}, mean:{}, max:{}] <{}> into <{}>"
+              .format(v[0], minVal, meanVal, maxVal, v[1].dtype, intType))
+
+    def cp_all(self, dsin, dsout, exceptvar=None):
+        glob_atts = dict([(x, dsin.getncattr(x)) for x in dsin.ncattrs()])
+        dim_sizes = [None if x.isunlimited() else len(x)
+                     for x in dsin.dimensions.values()]
+        dimensions = zip(dsin.dimensions.keys(), dim_sizes)
+        dsout.setncatts(glob_atts)
+        for d in dimensions:
+            dsout.createDimension(d[0], size=d[1])
+        for v in dsin.variables.iteritems():
+            if v[0] not in exceptvar:
+                v_new = dsout.createVariable(v[1].name, v[1].dtype, v[1].dimensions)
+            else:
+                v_new = self.compress(v)
+            atts = dict([(x, v[1].getncattr(x)) for x in v[1].ncattrs()])
+            v_new.setncatts(atts)
+
+
+                
+            
+        
+
+            
+
+
+            
+                   
+        
+        
+        
+        
+
+        
+        
+        
+
+        
+    
+
+            
         
         # def mk_attributes(self):
         #     dsout = Dataset(fout, 'w', format='NETCDF4')
@@ -67,8 +142,6 @@ class PackNetCDF(object):
             
             
 
-
- 
 
     ############################################################################
     # Open input and output files, then first copy dimensions and global
@@ -181,4 +254,12 @@ bla = '''
 if __name__ == "__main__":
     P = PackNetCDF()
     print (P.fin, P.fout, P.overwrite)
-    print(P.outResolutionShort)
+    #P.cp_input()
+    #P.update_history_att()
+    # P.select_vars()
+    # P.compress(P.selected_vars[0])
+    P.cp_all(P.dsin, P.dsout)
+    P.dsout.close()
+
+
+# run compress_netcdf.py test_unpacked.nc -o test_packed.nc
