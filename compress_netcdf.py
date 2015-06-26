@@ -95,7 +95,7 @@ class PackNetCDF(object):
         print("Packing variable {} [min:{}, mean:{}, max:{}] <{}> into <{}>"
               .format(v[0], minVal, meanVal, maxVal, v[1].dtype, intType))
 
-    def cp_all(self, dsin, dsout, exceptvar=None):
+    def cp_all(self, dsin, dsout, compressvar=None):
         glob_atts = dict([(x, dsin.getncattr(x)) for x in dsin.ncattrs()])
         dim_sizes = [None if x.isunlimited() else len(x)
                      for x in dsin.dimensions.values()]
@@ -105,7 +105,8 @@ class PackNetCDF(object):
             dsout.createDimension(d[0], size=d[1])
         for v in dsin.variables.iteritems():
             if v[0] not in exceptvar:
-                v_new = dsout.createVariable(v[1].name, v[1].dtype, v[1].dimensions)
+                v_new = dsout.createVariable(v[1].name, v[1].dtype,
+                                             v[1].dimensions)
             else:
                 v_new = self.compress(v)
             atts = dict([(x, v[1].getncattr(x)) for x in v[1].ncattrs()])
