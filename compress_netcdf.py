@@ -1,26 +1,29 @@
 import sys
 import os
 import argparse
-import shutil
 import datetime
 import numpy as np
 from netCDF4 import Dataset
 
 
 class PackNetCDF(object):
-    def __init__(self):
-        self.fin, self.fout, self.overwrite = self.parse_cmd()
-        self.dsin = Dataset(self.fin, 'r')
-        self.dsout = Dataset(self.fout, 'w')
     # number of values 2 and 4 byte unsigned integers
     outResolutionShort = 2.0**16 - 2
     outResolutionLong = 2.0**32 - 2  # for unknown reason 2**32 produces wrong results
                                      # try it anyway - hvw
+    complevel = 9
 
     # coordinate variables to prevent from compression even if they are 2D
+    # TODO automatically find coordinate variables!
     exclude = ('lon', 'lat', 'slon', 'slat', 'slonu', 'slatu', 'slonv',
                'slatv', 'time', 'time_bnds', 'rlon', 'rlat', 'level_bnds',
                'level', 'levels')
+
+    def __init__(self):
+        self.fin, self.fout, self.overwrite = self.parse_cmd()
+        self.dsin = Dataset(self.fin, 'r')
+        self.dsout = Dataset(self.fout, 'w')
+
 
     def parse_cmd(self):
         parser = argparse.ArgumentParser(description='Compress a netcdf file by ' +
@@ -142,7 +145,7 @@ class PackNetCDF(object):
                            [len(self.dsin.dimensions[x])
                             for x in v.dimensions[-2:]])
         v_new = self.dsout.createVariable(v.name, intType, v.dimensions,
-                                          zlib=True, complevel=9,
+                                          zlib=True, complevel=self.complevel,
                                           chunksizes=chunksizes,
                                           fill_value=fillval)
         scale_factor = (maxVal - minVal) / outres or 1
