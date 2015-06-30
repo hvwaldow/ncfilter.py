@@ -81,186 +81,92 @@ class PackNetCDF(object):
                  (x[1].dtype in ['float64', 'float32', 'uint32', 'uint16'])]
         self.selected_vars = v_sel
 
+
+    def cp_all(self, compressvars=None, compresshook=None):
+        '''
+        Copy content of netCDF-structure from self.dsin to self.dsout. Replace
+        variables in <compressvars> with the output of compresshook(<variable>).
+        '''
+        # Global attributes
+        glob_atts = dict([(x, self.dsin.getncattr(x))
+                          for x in self.dsin.ncattrs()])
+        self.dsout.setncatts(glob_atts)
+        # dimensions
+        dim_sizes = [None if x.isunlimited() else len(x)
+                     for x in self.dsin.dimensions.values()]
+        dimensions = zip(self.dsin.dimensions.keys(), dim_sizes)
+        for d in dimensions:
+            self.dsout.createDimension(d[0], size=d[1])
+        # variables
+        for v in self.dsin.variables.itervalues():
+            print("processing variable: {}".format(v.name)),
+            if compressvars is None or v.name not in compressvars:
+                print("copy")
+                v_new = self.dsout.createVariable(v.name, v.dtype, v.dimensions)
+                atts_new = dict([(x, v.getncattr(x)) for x in v.ncattrs()])
+                v_new.setncatts(atts_new)
+            else:
+                v_new = compresshook(v)
+            v_new[:] = v[:]
+
+    def check_values(self, v):
+        '''
+        Checks whether values of <v> are identical for self.dsin
+        and self.dsout.
+        '''
+        assert(np.all(self.dsin.variables[v][:] == self.dsout.variables[v][:]))
+        return("Value check for {} passed.".format(v))
+
     def compress(self, v):
         # check range, computed offset and scaling, and check if variable is
         # well behaved (short integer ok) or highly skewed (long integer necessary)
-        minVal = np.min(v[1][:])
-        maxVal = np.max(v[1][:])
-        meanVal = np.mean(v[1][:])
+        minVal = np.min(v[:])
+        maxVal = np.max(v[:])
+        meanVal = np.mean(v[:])
         if np.min(meanVal - minVal,
                   maxVal - meanVal) < (maxVal - minVal) / 1000:
             intType = np.dtype('uint32')
+            outres = self.outResolutionLong
+            fillval = np.uint32(2**32 - 1)
         else:
             intType = np.dtype('uint16')
+            outres = self.outResolutionShort
+            fillval = np.uint16(2**16 - 1)
         print("Packing variable {} [min:{}, mean:{}, max:{}] <{}> into <{}>"
-              .format(v[0], minVal, meanVal, maxVal, v[1].dtype, intType))
+              .format(v.name, minVal, meanVal, maxVal, v.dtype, intType))
 
-    def cp_all(self, dsin, dsout, compressvar=None):
-        glob_atts = dict([(x, dsin.getncattr(x)) for x in dsin.ncattrs()])
-        dim_sizes = [None if x.isunlimited() else len(x)
-                     for x in dsin.dimensions.values()]
-        dimensions = zip(dsin.dimensions.keys(), dim_sizes)
-        dsout.setncatts(glob_atts)
-        for d in dimensions:
-            dsout.createDimension(d[0], size=d[1])
-        for v in dsin.variables.iteritems():
-            if v[0] not in exceptvar:
-                v_new = dsout.createVariable(v[1].name, v[1].dtype,
-                                             v[1].dimensions)
-            else:
-                v_new = self.compress(v)
-            atts = dict([(x, v[1].getncattr(x)) for x in v[1].ncattrs()])
-            v_new.setncatts(atts)
-
-
-                
-            
-        
-
-            
+        # choose chunksize: The horizontal domain (last 2 dimensions)
+        # is one chunk. That the last 2 dimensions span the horizontal
+        # domain is a COARDS convention, which we assume here nonetheless.
+        chunksizes = tuple([1]*(len(v.dimensions) - 2) +
+                           [len(self.dsin.dimensions[x])
+                            for x in v.dimensions[-2:]])
+        v_new = self.dsout.createVariable(v.name, intType, v.dimensions,
+                                          zlib=True, complevel=9,
+                                          chunksizes=chunksizes,
+                                          fill_value=fillval)
+        scale_factor = (maxVal - minVal) / outres or 1
+        v_new.setncattr('scale_factor', scale_factor)
+        v_new.setncattr('add_offset', minVal)
+        v_new.setncattr('_FillValue', fillval)
+        v_new.set_auto_maskandscale(True)
+        # copy untouched attributes
+        att_cp = dict([(x, v.getncattr(x)) for x in v.ncattrs()
+                       if x not in v_new.ncattrs()])
+        v_new.setncatts(att_cp)
+        return(v_new)
 
 
-            
-                   
-        
-        
-        
-        
-
-        
-        
-        
-
-        
-    
-
-            
-        
-        # def mk_attributes(self):
-        #     dsout = Dataset(fout, 'w', format='NETCDF4')
-        #     datetime.datetime.now().ctime() + ': ' + 
-            
-            
-            
-
-
-    ############################################################################
-    # Open input and output files, then first copy dimensions and global
-    # attributes and then copy variables in compressed form if possible
-    ############################################################################
-bla = '''
-    dsin=Dataset(fin, 'r', format='NETCDF4')
-    dsout=Dataset(fout, 'w', format='NETCDF4')
-
-    # Copy global attributes and modify or create history attribute
-    cdate = datetime.datetime.now()
-    histattr = cdate.ctime()+': '+' '.join(sys.argv)
-
-    ehist = False
-
-    for k in dsin.ncattrs():
-        attr = dsin.getncattr(k)
-        if k == 'history':
-            ehist = True
-            attr = histattr + '\n' + attr
-            # The hstory attribute can not be stored properly as 2D character array with
-            # netcdf-python. The following two lines do not help, unfortunately.
-            #attr = attr.encode('ascii','ignore')
-            #attr = attr.split('\n')
-        if type(attr) is unicode:
-            dsout.setncattr(k,attr.encode('ascii','ignore'))
-        else:
-            dsout.setncattr(k,attr)
-
-    if not ehist:
-        dsout.setncattr('history',histattr.encode('ascii','ignore'))
-
-    #Copy dimensions
-    for dname, the_dim in dsin.dimensions.iteritems():
-        dsout.createDimension(dname, len(the_dim) if not the_dim.isunlimited() else None)
-
-    # Copy variables
-    for v_name, varin in dsin.variables.iteritems():
-
-        vd = varin.dimensions
-
-        if len(vd) >= 2 and not v_name in exclude and \
-           (varin.datatype == 'float32' or varin.datatype == 'float64' or \
-            varin.datatype == 'uint16' or varin.datatype == 'uint32'):
-
-            # check range, computed offset and scaling, and check if variable is
-            # well behaved (short integer ok) or highly skewed (long integer necessary)
-            minVal = np.min(varin[:])
-            maxVal = np.max(varin[:])
-            meanVal = np.mean(varin[:])
-
-            if (meanVal-minVal) >= (maxVal-minVal)/1000.:
-                outResolution=outResolutionShort
-                intType = 'u2'
-            else:
-                outResolution=outResolutionLong
-                intType = 'u4'
-
-            #outResolution=outResolutionShort
-            #intType = 'u2'
-
-            # compress variable
-            print 'variable',v_name,varin.datatype,' compressed as ',intType,minVal,maxVal,meanVal
-            if len(vd) == 2:
-                chunksizes= (len(dsin.dimensions[vd[0]]),len(dsin.dimensions[vd[1]]))
-            elif len(vd) == 3:
-                chunksizes= (1,len(dsin.dimensions[vd[1]]),len(dsin.dimensions[vd[2]]))
-            elif len(vd) == 4:
-                chunksizes= (1,1,len(dsin.dimensions[vd[2]]),len(dsin.dimensions[vd[3]]))
-            else:
-                print('Warning: not tested for 5-D or higher dimension arrays')
-                chunksizes= (1,1,1,len(dsin.dimensions[vd[3]]),len(dsin.dimensions[vd[4]]))
-            outVar = dsout.createVariable(v_name,intType,varin.dimensions,zlib=True,complevel=9,\
-                                          chunksizes=chunksizes)
-            add_offset=minVal
-            if maxVal == minVal:
-                scale_factor = 1.
-            else:
-                scale_factor=(maxVal-minVal)/outResolution
-            outVar.setncattr('scale_factor',scale_factor)
-            outVar.setncattr('add_offset',add_offset)
-            outVar.set_auto_maskandscale(True)
-
-        else:
-
-            outVar = dsout.createVariable(v_name, varin.datatype, varin.dimensions)
-            print 'preserved variable',v_name,varin.datatype
-
-        # Copy remaining variable attributes except fill value
-        for k in varin.ncattrs():
-            if k != '_FillValue':
-                # encode attribute as simple ASCII instead of unicode
-                attr = varin.getncattr(k)
-                if type(attr) is unicode:
-                    outVar.setncattr(k,attr.encode('ascii','ignore'))
-                else:
-                    outVar.setncattr(k,attr)
-
-        outVar[:] = varin[:]
-
-    # close the input and output files
-    dsout.close() 
-    dsin.close()
-
-
-    if overwrite:
-        os.rename(fout,fin)
-'''
+    # if overwrite:
+    #     os.rename(fout,fin)
 
 if __name__ == "__main__":
     P = PackNetCDF()
     print (P.fin, P.fout, P.overwrite)
-    #P.cp_input()
-    #P.update_history_att()
-    # P.select_vars()
-    # P.compress(P.selected_vars[0])
-    P.cp_all(P.dsin, P.dsout)
+    P.cp_all(compressvars='pr', compresshook=P.compress)
+    # print(P.check_values('pr'))
     P.dsout.close()
-
+    P.dsin.close()
+    
 
 # run compress_netcdf.py test_unpacked.nc -o test_packed.nc
