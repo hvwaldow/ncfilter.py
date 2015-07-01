@@ -159,6 +159,43 @@ class PackNetCDF(object):
         v_new.setncatts(att_cp)
         return(v_new)
 
+    def get_coordvars(self, dimension=None, type=None):
+        '''
+        Returns all variable names that represent coordinates. Restrict
+        to time, easting, northing by specifying
+          dimension='T',
+          dimension='Z',
+          dimension='X',
+          dimension='Y',
+        respectively.
+        Specify
+          <type>='dim'
+        to get only dimension variables, or
+          <type>='aux'
+        to get only auxiliary coordinate variables.
+        '''
+        def isT(v):
+            print(v.name)
+            try:
+                if v.getncattr('axis') == 'T':
+                    return(True)
+            except:
+                pass
+            try:
+                if (v.getncattr('units').split(' ')[0]
+                    in ['common_year', 'common_years', 'year', 'years', 'yr', 'a', 'month', 'months', 'week',
+                        'weeks', 'day', 'days', 'd', 'hour', 'hours', 'hr',
+                        'h', 'minute', 'minutes', 'min', 'second', 'seconds',
+                        's', 'sec']):
+                    return(True)
+            except:
+                pass
+            return(False)
+
+        # def isZ(self, atts):
+        # def isX(self, atts):
+        # def isY(self, atts):
+        
 
     # if overwrite:
     #     os.rename(fout,fin)
@@ -173,3 +210,4 @@ if __name__ == "__main__":
     
 
 # run compress_netcdf.py test_unpacked.nc -o test_packed.nc
+
