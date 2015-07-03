@@ -2,28 +2,93 @@ import sys
 import os
 import argparse
 import datetime
+from collections import OrderedDict
 import numpy as np
 from netCDF4 import Dataset
 
 
-class PackNetCDF(object):
-    # number of values 2 and 4 byte unsigned integers
-    outResolutionShort = 2.0**16 - 2
-    outResolutionLong = 2.0**32 - 2  # for unknown reason 2**32 produces wrong results
-                                     # try it anyway - hvw
-    complevel = 9
+class NcFilter(object):
 
-    # coordinate variables to prevent from compression even if they are 2D
-    # TODO automatically find coordinate variables!
-    exclude = ('lon', 'lat', 'slon', 'slat', 'slonu', 'slatu', 'slonv',
-               'slatv', 'time', 'time_bnds', 'rlon', 'rlat', 'level_bnds',
-               'level', 'levels')
+    def __init__(self, origin):
+        '''
+        Read all the meta-data of the source file
+        into reasonable data-structures.
+        '''
+        self.dsin = Dataset(origin, 'r')
+        # Global attributes
+        self.glob_atts = OrderedDict([(x, self.dsin.getncattr(x))
+                                      for x in self.dsin.ncattrs()])
+        # Dimensions
+        dim_sizes = [None if x.isunlimited() else len(x)
+                     for x in self.dsin.dimensions.values()]
+        self.dims = OrderedDict(zip(self.dsin.dimensions.keys(), dim_sizes))
+        # variables
+        self.variables = [{'name': x.name,
+                           'dtype': x.dtype,
+                           'dimensions': x.dimensions,
+                           'attributes': self._get_var_attrs(x)}
+                          for x in self.dsin.variables.values()]
 
-    def __init__(self):
-        self.fin, self.fout, self.overwrite = self.parse_cmd()
-        self.dsin = Dataset(self.fin, 'r')
-        self.dsout = Dataset(self.fout, 'w')
+    def _get_var_attrs(self, v):
+        return(OrderedDict([(x, v.getncattr(x)) for x in v.ncattrs()]))
 
+    def write(self, outfile, newdata=None):
+        dsout = Dataset(outfile, "w")
+        # write global attributes
+        dsout.setncatts(self.glob_atts)
+        # write dimensions
+        for dnam, dsiz in self.dims.iteritems():
+            dsout.createDimension(dnam, dsiz)
+        # write variables
+        for v in self.variables:
+            vout = dsout.createVariable(v['name'], v['dtype'],
+                                        dimensions=v['dimensions'])
+            vout.setncatts(v['attributes'])
+            try:
+                vout[:] = newdata[v['name']]
+            except TypeError:
+                vout[:] = self.dsin.variables[v['name']][:]
+        dsout.close()
+
+    def compress(self):
+        def _update_history_att():
+            thishistory = (datetime.datetime.now().ctime() +
+                           ': ' + ' '.join(sys.argv))
+            try:
+                newatt = "{}\n{}".format(thishistory, self.glob_atts('history'))
+                #  separating new entries with "\n" because there is an undocumented
+                #  feature in ncdump that will make it look like the attribute is an
+                #  array of strings, when in fact it is not.
+            except AttributeError:
+                newatt = thishistory
+            self.glob_atts['history'] = newatt
+
+            def _select_vars():
+                '''Select variables that are going to be packed'''
+                v_sel = [x for x in self.ds.variables.iteritems()
+                         if (x[0] not in P.exclude) and
+                         (x[1].ndim >= 2) and
+                         (x[1].dtype in ['float64', 'float32', 'uint32', 'uint16'])]
+                self.selected_vars = v_sel
+
+
+
+
+            
+        
+        
+                                
+                     for x in self.dsin.variables.values()]
+        for v in self.dsin.variables.itervalues():
+            v_new = self.dsout.createVariable(v.name, v.dtype, v.dimensions)
+                atts_new = dict([(x, v.getncattr(x)) for x in v.ncattrs()])
+                v_new.setncatts(atts_new)
+            else:
+                v_new = compresshook(v)
+            v_new[:] = v[:]
+        
+        
+        
 
     def parse_cmd(self):
         parser = argparse.ArgumentParser(description='Compress a netcdf file by ' +
@@ -62,27 +127,11 @@ class PackNetCDF(object):
                     os.mkdir(dir_out)
                 fout = os.path.join(dir_out, os.path.basename(fin))
         return((fin, fout, args['overwrite']))
+       # self.fin, self.fout, self.overwrite = self.parse_cmd()
+       # self.dsout = Dataset(self.fout, 'w')
 
-    def update_history_att(self):
-        thishistory = (datetime.datetime.now().ctime() +
-                       ': ' + ' '.join(sys.argv))
-        try:
-            newatt = "{}\n{}".format(thishistory, self.ds.getncattr('history'))
-            #  separating new entries with "\n" because there is an undocumented
-            #  feature in ncdump that will make it look like the attribute is an
-            #  array of strings, when in fact it is not.
-        except AttributeError:
-            newatt = thishistory
-        self.ds.setncattr('history', newatt)
-        return(newatt)
 
-    def select_vars(self):
-        '''Select variables that are going to be packed'''
-        v_sel = [x for x in self.ds.variables.iteritems()
-                 if (x[0] not in P.exclude) and
-                 (x[1].ndim >= 2) and
-                 (x[1].dtype in ['float64', 'float32', 'uint32', 'uint16'])]
-        self.selected_vars = v_sel
+
 
 
     def cp_all(self, compressvars=None, compresshook=None):
@@ -121,6 +170,18 @@ class PackNetCDF(object):
         return("Value check for {} passed.".format(v))
 
     def compress(self, v):
+
+    outResolutionShort = 2.0**16 - 2
+    outResolutionLong = 2.0**32 - 2  # for unknown reason 2**32 produces wrong results
+                                     # try it anyway - hvw
+    complevel = 9
+
+    # coordinate variables to prevent from compression even if they are 2D
+    # TODO automatically find coordinate variables!
+    exclude = ('lon', 'lat', 'slon', 'slat', 'slonu', 'slatu', 'slonv',
+               'slatv', 'time', 'time_bnds', 'rlon', 'rlat', 'level_bnds',
+               'level', 'levels')
+
         # check range, computed offset and scaling, and check if variable is
         # well behaved (short integer ok) or highly skewed (long integer necessary)
         minVal = np.min(v[:])
@@ -201,12 +262,14 @@ class PackNetCDF(object):
     #     os.rename(fout,fin)
 
 if __name__ == "__main__":
-    P = PackNetCDF()
-    print (P.fin, P.fout, P.overwrite)
-    P.cp_all(compressvars='pr', compresshook=P.compress)
-    # print(P.check_values('pr'))
-    P.dsout.close()
-    P.dsin.close()
+    P = NcFilter('test_unpacked.nc')
+    P.write('test_packed.nc')
+    #P.dsout.close()
+    # print (P.fin, P.fout, P.overwrite)
+    # P.cp_all(compressvars='pr', compresshook=P.compress)
+    # # print(P.check_values('pr'))
+    # P.dsout.close()
+    # P.dsin.close()
     
 
 # run compress_netcdf.py test_unpacked.nc -o test_packed.nc
