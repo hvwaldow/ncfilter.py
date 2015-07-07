@@ -38,6 +38,9 @@ class NcFilter(object):
     def _getvarnames(self):
         return([v['name'] for v in self.variables])
 
+    def _get_origin_values(self, varname):
+        return(self.dsin.variables['varname'][:])
+
     def write(self, outfile, newdata={}):
         '''
         Creates <outfile> with meta-data as in class attributes.
@@ -73,9 +76,6 @@ class NcFilter(object):
 
         # variables to be identically copied (data):
         vcp = set(self._getvarnames()) - set(newdata.keys())
-        print (set(self._getvarnames()))
-        print(set(newdata.keys()))
-        print(vcp)
         self.dsin = Dataset(self.origin, "r")
         for v in vcp:
             dsout.variables[v][:] = self.dsin.variables[v][:]
@@ -85,6 +85,10 @@ class NcFilter(object):
         for v in newdata.keys():
             dsout.variables[v][:] = newdata[v][:]
         dsout.close()
+
+    
+        
+        
 
     # def compress(self):
     #     def _update_history_att():
@@ -304,4 +308,3 @@ if __name__ == "__main__":
     
 
 # run compress_netcdf.py test_unpacked.nc -o test_packed.nc
-

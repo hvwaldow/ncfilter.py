@@ -7,12 +7,13 @@ TESTOUT = 'test_packed.nc'
 
 class NcFilter_Test():
 
-    def setup(self):
+    def setUp(self):
         try:
             os.remove(TESTOUT)
         except OSError:
             pass
         assert not os.path.exists(TESTOUT)
+        print("In setUp")
         self.P = NcFilter(TESTIN)
 
     def no_test(self):
@@ -56,13 +57,36 @@ class NcFilter_Test():
         assert(np.all(newdata['newvar'] == ds2.variables['newvar'][:]))
         ds2.close()
 
-        # def write_data_replace_vars_test(self):
-            
-        # def write_data_remove_vars_test(self):
+    def delete_variable_test(self): #, varname):
+        raise Exception
 
+    def insert_variable_test(self): #, var_dict, data):
+        raise Exception
 
+    def modify_variable_meta_test(self):  #, varname, newname=None, newdtype=None, newdimensions=None, **newattributes):
+        # '''
+        # newattributes: old not mentioned -> keep old,
+        # old = None -> delete
+        # old = value -> replace
+        # new = value -> insert)
+        # '''
+        raise Exception
 
+    def copy_variable_meta_test(self):#, varname, newname):
+        raise Exception
 
+    def replace_variable_data_test(self):#, varname, new_data_func=None,
+                                   # *newdataargs):
+        raise Exception
+
+    def delete_dimensions_test(self):#, dimnames):
+        raise Exception
+
+    def insert_dimensions_test(self):#, dimensions):
+        raise Exception
+
+    def compress_test(self):
+        raise Exception
 
 
 
