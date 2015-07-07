@@ -56,15 +56,26 @@ class NcFilter_Test():
         assert(np.all(newdata['newvar'] == ds2.variables['newvar'][:]))
         ds2.close()
 
-    def delete_variable_test(self): #, varname):
+    def delete_variable_test(self):
         self.P.delete_variable('lon').write(TESTOUT)
         ds1 = Dataset(TESTIN, 'r')
         ds2 = Dataset(TESTOUT, 'r')
         assert((set(ds1.variables.keys()) - set(ds2.variables.keys()))
                == {'lon'})
 
-    def insert_variable_test(self): #, var_dict, data):
-        raise Exception
+    def insert_variable_test(self):
+        newdims = {'newdim1': 4, 'newdim2': 5, 'newdim3': 6}
+        self.P.insert_dimensions(newdims)
+        var_dict = {'name': 'testinsert', 'dtype': float,
+                    'dimensions': ('newdim1', 'newdim2', 'newdim3'),
+                    'attributes': {'att1': 1, 'att2': 'two', 'att3': 3.01}}
+        data = {'testinsert': np.random.randn(4, 5, 6)}
+        self.P.insert_variable(var_dict, data).write(TESTOUT)
+        d1 = Dataset(TESTOUT, 'r')
+        d1v = d1.variables['testinsert']
+        assert(np.all(d1v[:] == data['testinsert']))
+        d1.close()
+        assert(self._comparemeta(TESTOUT))
 
     def modify_variable_meta_test(self):  #, varname, newname=None, newdtype=None, newdimensions=None, **newattributes):
         # '''
@@ -86,7 +97,11 @@ class NcFilter_Test():
         raise Exception
 
     def insert_dimensions_test(self):#, dimensions):
-        raise Exception
+        newdims = {'newdim1': 4, 'newdim2': 5, 'newdim3': 6}
+        self.P.insert_dimensions(newdims).write(TESTOUT)
+        P2 = NcFilter(TESTOUT)
+        assert(self.P.dims == P2.dims)
+        
 
     def compress_test(self):
         raise Exception

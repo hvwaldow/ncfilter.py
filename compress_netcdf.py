@@ -30,6 +30,7 @@ class NcFilter(object):
                            'dimensions': x.dimensions,
                            'attributes': self._get_var_attrs(x)}
                           for x in self.dsin.variables.values()]
+        self.newdata = {}
         self.dsin.close()
 
     def _get_var_attrs(self, v):
@@ -41,25 +42,24 @@ class NcFilter(object):
     def _get_origin_values(self, varname):
         return(self.dsin.variables['varname'][:])
 
-    def write(self, outfile, newdata={}):
+    def write(self, outfile):
         '''
-        Creates <outfile> with meta-data as in class attributes.
-        New data (not in <self.origin>) is passed as numpy array of
-        suitable shape and datatype in the directory <newdata>.
-        The keys of <newdata> are variable names, its values are numpy arrays.
-        The keys of <newdata> have to have a corresponding entry
-        in self.variables.
-        For variables with no entry in <newdata>, the corresponding data from
-        <self.dsin> is copied.
+        Creates <outfile> with meta-data as in
+          self.glob_atts
+          self.dims
+          self.variables
+        Data in self.newdata ( {<varname>: np.array(...), ...} ) replaces
+        the respective data of <varname> in the original file.
+        New <varname>s in <self.newdata> have to be present in <self.variables>.
         '''
-
+                                 
         dsout = Dataset(outfile, "w")
-
+        
         # sanity checks
-        if not (type(newdata) == dict):
-            sys.exit("<newdata> has to be a dictionary")
-        if not set(newdata.keys()) <= set(self._getvarnames()):
-            sys.exit("<newdata> has not defined variable names")
+        if not (type(self.newdata) == dict):
+            sys.exit("<self.newdata> has to be a dictionary")
+        if not set(self.newdata.keys()) <= set(self._getvarnames()):
+            sys.exit("<self.newdata> has not defined variable names")
 
         # write global attributes
         dsout.setncatts(self.glob_atts)
@@ -75,19 +75,28 @@ class NcFilter(object):
             vout.setncatts(v['attributes'])
 
         # variables to be identically copied (data):
-        vcp = set(self._getvarnames()) - set(newdata.keys())
+        vcp = set(self._getvarnames()) - set(self.newdata.keys())
         self.dsin = Dataset(self.origin, "r")
         for v in vcp:
             dsout.variables[v][:] = self.dsin.variables[v][:]
         self.dsin.close()
 
         # variables with new data
-        for v in newdata.keys():
-            dsout.variables[v][:] = newdata[v][:]
+        for v in self.newdata.keys():
+            dsout.variables[v][:] = self.newdata[v][:]
         dsout.close()
 
     def delete_variable(self, varname):
         del (self.variables[self._getvarnames().index(varname)])
+        return(self)
+
+    def insert_variable(self, var_dict, data):
+        self.variables.append(var_dict)
+        self.newdata = data
+        return(self)
+
+    def insert_dimensions(self, dimensions):
+        self.dims.update(dimensions)
         return(self)
         
 
