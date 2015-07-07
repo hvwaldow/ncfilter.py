@@ -1,4 +1,5 @@
 from compress_netcdf import *
+from nose.tools import *
 import os
 
 TESTIN = 'test_unpacked_w.nc'
@@ -49,11 +50,11 @@ class NcFilter_Test():
         self.P.dims['newdim1'] = 2
         self.P.dims['newdim2'] = 3
         self.P.dims['newdim3'] = 4
-        newdata = {'newvar': np.arange(1, 25).reshape(2, 3, 4)}
-        self.P.write(TESTOUT, newdata=newdata)
+        self.P.newdata = {'newvar': np.arange(1, 25).reshape(2, 3, 4)}
+        self.P.write(TESTOUT)
         self._comparemeta(TESTOUT)
         ds2 = Dataset(TESTOUT, 'r')
-        assert(np.all(newdata['newvar'] == ds2.variables['newvar'][:]))
+        assert(np.all(self.P.newdata['newvar'] == ds2.variables['newvar'][:]))
         ds2.close()
 
     def delete_variable_test(self):
@@ -84,7 +85,25 @@ class NcFilter_Test():
         # old = value -> replace
         # new = value -> insert)
         # '''
-        raise Exception
+        newdims = {'newdim1': 4, 'newdim2': 5, 'newdim3': 6}
+        newdimensions = tuple(newdims.keys())
+        newdimshape = tuple(newdims.values())
+        @raises(SystemExit)
+        def fail_dimensions_test():
+            self.P.modify_variable_meta('pr', newdimensions=newdims.keys(),
+                                        units='buckets per squarefoot',
+                                        new_att='newatt')\
+                  .insert_dimensions(newdims).write(TESTOUT)
+        fail_dimensions_test()
+        self.P.insert_dimensions(newdims).\
+            modify_variable_meta('pr', newdimensions=newdimensions,
+                                 units='buckets per squarefoot',
+                                 new_att='newatt').write(TESTOUT)
+        d1 = Dataset(TESTOUT, 'r')
+        assert(d1.variables['pr'].dimensions == newdimensions)
+        assert(d1.variables['pr'].getncattr('units') == 'buckets per squarefoot')
+        assert(d1.variables['pr'].getncattr('new_att') == 'newatt')
+        # TODO: check correct empty array created
 
     def copy_variable_meta_test(self):#, varname, newname):
         raise Exception

@@ -27,7 +27,7 @@ class NcFilter(object):
         # All keys have to be present! In case of no attributes use empty dict.
         self.variables = [{'name': x.name,
                            'dtype': x.dtype,
-                           'dimensions': x.dimensions,
+                           'dimensions': x.dimensions,  # tuple
                            'attributes': self._get_var_attrs(x)}
                           for x in self.dsin.variables.values()]
         self.newdata = {}
@@ -42,6 +42,11 @@ class NcFilter(object):
     def _get_origin_values(self, varname):
         return(self.dsin.variables['varname'][:])
 
+    def _mk_empty_data(self, varname, dimensions, dtyp):
+        return({varname: np.ma.MaskedArray(
+            np.zeros(dimensions, dtype=np.dtype(dtyp)),
+            mask=True)})
+
     def write(self, outfile):
         '''
         Creates <outfile> with meta-data as in
@@ -52,9 +57,9 @@ class NcFilter(object):
         the respective data of <varname> in the original file.
         New <varname>s in <self.newdata> have to be present in <self.variables>.
         '''
-                                 
         dsout = Dataset(outfile, "w")
-        
+        dsout.set_auto_mask(True)
+
         # sanity checks
         if not (type(self.newdata) == dict):
             sys.exit("<self.newdata> has to be a dictionary")
@@ -70,6 +75,7 @@ class NcFilter(object):
 
         # define variables (meta only)
         for v in self.variables:
+            #print("name: {}  dtype: {}".format(v['name'], v['dtype']))
             vout = dsout.createVariable(v['name'], v['dtype'],
                                         dimensions=v['dimensions'])
             vout.setncatts(v['attributes'])
@@ -91,12 +97,35 @@ class NcFilter(object):
         return(self)
 
     def insert_variable(self, var_dict, data):
+        '''
+        <var_dict> is a dictionary as in self.variables.
+        <data> is a dictionary {<varname>: numpy.array(...)}
+        '''
         self.variables.append(var_dict)
-        self.newdata = data
+        self.newdata.update(data)
         return(self)
 
     def insert_dimensions(self, dimensions):
+        '''<dimensions> is a dictionary {<dimname>: <dimsize>, ...}.'''
         self.dims.update(dimensions)
+        return(self)
+
+    def modify_variable_meta(self, varname, newdtype=None,
+                             newdimensions=None, **newattributes):
+        varidx = self._getvarnames().index(varname)
+        self.variables[varidx]['attributes'].update(newattributes)
+        if newdtype:
+            self.variables[varidx]['dtype'] = newdtype
+        if newdimensions:
+            if not set(newdimensions) <= set(self.dims):
+                sys.exit("Define dimensions {} for variable {} first"
+                         .format(newdimensions, varname))
+            newdimensions = tuple(newdimensions)
+            self.variables[varidx]['dimensions'] = newdimensions
+            dims = tuple([self.dims[x] for x in newdimensions])
+            self.newdata.update(
+                self._mk_empty_data(varname, dims,
+                                    self.variables[varidx]['dtype']))
         return(self)
         
 
