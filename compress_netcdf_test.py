@@ -13,7 +13,6 @@ class NcFilter_Test():
         except OSError:
             pass
         assert not os.path.exists(TESTOUT)
-        print("In setUp")
         self.P = NcFilter(TESTIN)
 
     def no_test(self):
@@ -58,7 +57,11 @@ class NcFilter_Test():
         ds2.close()
 
     def delete_variable_test(self): #, varname):
-        raise Exception
+        self.P.delete_variable('lon').write(TESTOUT)
+        ds1 = Dataset(TESTIN, 'r')
+        ds2 = Dataset(TESTOUT, 'r')
+        assert((set(ds1.variables.keys()) - set(ds2.variables.keys()))
+               == {'lon'})
 
     def insert_variable_test(self): #, var_dict, data):
         raise Exception

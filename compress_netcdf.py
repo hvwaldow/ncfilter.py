@@ -86,8 +86,9 @@ class NcFilter(object):
             dsout.variables[v][:] = newdata[v][:]
         dsout.close()
 
-    
-        
+    def delete_variable(self, varname):
+        del (self.variables[self._getvarnames().index(varname)])
+        return(self)
         
 
     # def compress(self):
