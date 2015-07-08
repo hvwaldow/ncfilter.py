@@ -137,7 +137,23 @@ class NcFilter(object):
                 self._mk_empty_data(varname, newdimsizes,
                                     self.variables[varidx]['dtype']))
         return(self)
-        
+
+    def modify_variable_data(self, newdata):
+        '''
+        (str) varname:  Name of variable.
+        (dict) newdata: new data.
+        Attaches <newdata> to <varname>.
+        '''
+        v_undef = list(set(newdata.keys()) - set(self._getvarnames()))
+        v_def = list(set(newdata.keys()) & set(self._getvarnames()))        
+        if v_undef:
+            print("WARNING: data attached to non-existing variables {}"
+                  .format(v_undef))
+        if v_def:
+            print("WARNING: Overwriting data of variable(s): {}".format(v_def))
+        # TODO: check for wrong dimensions.
+        self.newdata.update(newdata)
+        return(self)
 
     # def compress(self):
     #     def _update_history_att():

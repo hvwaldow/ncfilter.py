@@ -105,15 +105,19 @@ class NcFilter_Test():
         assert(d1.variables['pr'][:].shape == newdimshape)
         d1.close()
 
-    def copy_variable_meta_test(self):#, varname, newname):
-        raise Exception
-
-    def replace_variable_data_test(self):#, varname, new_data_func=None,
-                                   # *newdataargs):
-        raise Exception
-
-    def delete_dimensions_test(self):#, dimnames):
-        raise Exception
+    # TEST THIS ONCE I UNDERSTAND CAPTURING IO !!
+    def modify_variable_data_test(self):
+        d = np.array(np.random.randn(2, 3, 4))
+        newdata = {'rlat': np.arange(190)}
+        self.P.modify_variable_data(newdata)
+        #output = sys.stdout.getvalue().strip()
+        # print("********************************************")
+        # print(output)
+        # print("********************************************")
+        # outshould = "WARNING: Overwriting data of variable(s): ['rlon', 'rlat']\n" +\
+        #             "WARNING: data attached to non-existing variables ['newvar']\n"
+        # assert(output == outshould)
+        self.P.write(TESTOUT)
 
     def insert_dimensions_test(self):#, dimensions):
         newdims = {'newdim1': 4, 'newdim2': 5, 'newdim3': 6}
@@ -121,9 +125,14 @@ class NcFilter_Test():
         P2 = NcFilter(TESTOUT)
         assert(self.P.dims == P2.dims)
         
+    # def copy_variable_meta_test(self):#, varname, newname):
+    #     raise Exception
 
-    def compress_test(self):
-        raise Exception
+    # def delete_dimensions_test(self):#, dimnames):
+    #     raise Exception
+
+    # def compress_test(self):
+    #     raise Exception
 
 
 
