@@ -106,25 +106,35 @@ class NcFilter(object):
         return(self)
 
     def insert_dimensions(self, dimensions):
-        '''<dimensions> is a dictionary {<dimname>: <dimsize>, ...}.'''
+        '''<dimensions> is an OrderedDictionary {<dimname>: <dimsize>, ...}.'''
         self.dims.update(dimensions)
         return(self)
 
     def modify_variable_meta(self, varname, newdtype=None,
-                             newdimensions=None, **newattributes):
+                             newdims=None, **newattributes):
+        '''
+        varname (str): name of variable to modify.
+        newdtype (numpy.dtype): new datatype, if applicable.
+        newdims (OrderedDict): new dimensions as {dimname: size, ...},
+                               if applicable.
+        In case newdims are given, these dimensions are created if not
+        already present, and the data will be set to a properly sized
+        array filled with _FillValue.
+        '''
         varidx = self._getvarnames().index(varname)
         self.variables[varidx]['attributes'].update(newattributes)
         if newdtype:
+            assert(type(newdtype) == np.dtype)
             self.variables[varidx]['dtype'] = newdtype
-        if newdimensions:
-            if not set(newdimensions) <= set(self.dims):
-                sys.exit("Define dimensions {} for variable {} first"
-                         .format(newdimensions, varname))
-            newdimensions = tuple(newdimensions)
-            self.variables[varidx]['dimensions'] = newdimensions
-            dims = tuple([self.dims[x] for x in newdimensions])
+        if newdims:
+            assert(type(newdims) == OrderedDict)
+            missdims = set(newdims) - set(self.dims)
+            self.dims.update([(d, newdims[d]) for d in missdims])
+            newdimnames = tuple(newdims.keys())
+            self.variables[varidx]['dimensions'] = newdimnames
+            newdimsizes = tuple(newdims.values())
             self.newdata.update(
-                self._mk_empty_data(varname, dims,
+                self._mk_empty_data(varname, newdimsizes,
                                     self.variables[varidx]['dtype']))
         return(self)
         

@@ -85,25 +85,25 @@ class NcFilter_Test():
         # old = value -> replace
         # new = value -> insert)
         # '''
-        newdims = {'newdim1': 4, 'newdim2': 5, 'newdim3': 6}
+        newdims = OrderedDict([('newdim1', 4), ('newdim2', 5), ('newdim3', 6)])
         newdimensions = tuple(newdims.keys())
         newdimshape = tuple(newdims.values())
-        @raises(SystemExit)
+        @raises(AssertionError)
         def fail_dimensions_test():
-            self.P.modify_variable_meta('pr', newdimensions=newdims.keys(),
+            self.P.modify_variable_meta('pr', newdims=newdimensions,
                                         units='buckets per squarefoot',
-                                        new_att='newatt')\
-                  .insert_dimensions(newdims).write(TESTOUT)
+                                        new_att='newatt').write(TESTOUT)
         fail_dimensions_test()
-        self.P.insert_dimensions(newdims).\
-            modify_variable_meta('pr', newdimensions=newdimensions,
-                                 units='buckets per squarefoot',
-                                 new_att='newatt').write(TESTOUT)
+        self.P.modify_variable_meta('pr', newdims=newdims,
+                                    units='buckets per squarefoot',
+                                    new_att='newatt').write(TESTOUT)
         d1 = Dataset(TESTOUT, 'r')
         assert(d1.variables['pr'].dimensions == newdimensions)
         assert(d1.variables['pr'].getncattr('units') == 'buckets per squarefoot')
         assert(d1.variables['pr'].getncattr('new_att') == 'newatt')
-        # TODO: check correct empty array created
+        print(d1.variables['pr'][:].shape)
+        assert(d1.variables['pr'][:].shape == newdimshape)
+        d1.close()
 
     def copy_variable_meta_test(self):#, varname, newname):
         raise Exception
