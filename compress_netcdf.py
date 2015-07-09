@@ -173,6 +173,33 @@ class NcFilter(object):
         self.newdata.update(newdata)
         return(self)
 
+    def _compress_prep(self, varname):
+        '''
+        Prepare lossy compression of variable <v>.
+        Check range, computed offset and scaling, and check if variable is
+        well behaved (short integer ok) or highly skewed (long integer necessary).
+        Return parameters for compressing.
+        '''
+        outResolutionShort = 2.0**16 - 2
+        outResolutionLong = 2.0**32 - 2
+        v = Dataset(self.origin, 'r').variables[varname][:]
+        minVal = np.min(v[:])
+        maxVal = np.max(v[:])
+        meanVal = np.mean(v[:])
+        if np.min(meanVal - minVal,
+                  maxVal - meanVal) < (maxVal - minVal) / 1000:
+            intType = np.dtype('uint32')
+            outres = outResolutionLong
+            fillval = np.uint32(2**32 - 1)
+        else:
+            intType = np.dtype('uint16')
+            outres = outResolutionShort
+            fillval = np.uint16(2**16 - 1)
+        return(minVal, meanVal, maxVal, v.dtype, intType, outres, fillval)
+        # print("Packing variable {} [min:{}, mean:{}, max:{}] <{}> into <{}>"
+        #       .format(v.name, minVal, meanVal, maxVal, v.dtype, intType))
+
+
     # def compress(self):
     #     def _update_history_att():
     #         thishistory = (datetime.datetime.now().ctime() +

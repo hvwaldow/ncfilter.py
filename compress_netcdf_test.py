@@ -135,6 +135,11 @@ class NcFilter_Test():
         print(ds1, ds2, ds3)
         assert(ds1 == (None, 190, 174) and ds2 == (None, )
                and ds3 == (174, ))
+
+    # def _compress_prep_test(self):
+    #     d_skewed =
+
+        
     # def copy_variable_meta_test(self):#, varname, newname):
     #     raise Exception
 
