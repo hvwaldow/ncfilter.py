@@ -78,7 +78,7 @@ class NcFilter_Test():
         d1.close()
         assert(self._comparemeta(TESTOUT))
 
-    def modify_variable_meta_test(self):  #, varname, newname=None, newdtype=None, newdimensions=None, **newattributes):
+    def modify_variable_meta_test(self):
         # '''
         # newattributes: old not mentioned -> keep old,
         # old = None -> delete
@@ -105,26 +105,36 @@ class NcFilter_Test():
         assert(d1.variables['pr'][:].shape == newdimshape)
         d1.close()
 
-    # TEST THIS ONCE I UNDERSTAND CAPTURING IO !!
     def modify_variable_data_test(self):
-        d = np.array(np.random.randn(2, 3, 4))
-        newdata = {'rlat': np.arange(190)}
+        newdata = {'rlat': np.arange(190, dtype='float32')}  # OK
+        newdata.update({'xx': np.arange(5)})  # non-exist
+        newdata.update({'lat': np.zeros((3, 3))})  # wrong shape
         self.P.modify_variable_data(newdata)
-        #output = sys.stdout.getvalue().strip()
-        # print("********************************************")
-        # print(output)
-        # print("********************************************")
-        # outshould = "WARNING: Overwriting data of variable(s): ['rlon', 'rlat']\n" +\
-        #             "WARNING: data attached to non-existing variables ['newvar']\n"
-        # assert(output == outshould)
-        self.P.write(TESTOUT)
+        output = sys.stdout.getvalue().strip()
+        assert("WARNING: data attached to non-existing variables ['xx']"
+               in output)
+        assert("WARNING: Dimension mismatch for variables: ['lat']" in output)
+        assert("WARNING: Datatype mismatch for variables: ['lat']" in output)
+        assert("['rlat']" not in output)
+        self.P.newdata = {}
+        newdata = {'rlat': np.arange(190, dtype='float32')}
+        self.P.modify_variable_data(newdata).write(TESTOUT)
+        assert(np.all(Dataset(TESTOUT, 'r').variables['rlat'][:]
+                      == np.arange(190, dtype='float32')))
 
-    def insert_dimensions_test(self):#, dimensions):
+    def insert_dimensions_test(self):
         newdims = {'newdim1': 4, 'newdim2': 5, 'newdim3': 6}
         self.P.insert_dimensions(newdims).write(TESTOUT)
         P2 = NcFilter(TESTOUT)
         assert(self.P.dims == P2.dims)
-        
+
+    def _get_dimshape_test(self):
+        ds1 = self.P._get_dimshape('pr')
+        ds2 = self.P._get_dimshape('time')
+        ds3 = self.P._get_dimshape('rlon')
+        print(ds1, ds2, ds3)
+        assert(ds1 == (None, 190, 174) and ds2 == (None, )
+               and ds3 == (174, ))
     # def copy_variable_meta_test(self):#, varname, newname):
     #     raise Exception
 

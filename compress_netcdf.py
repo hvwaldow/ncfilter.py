@@ -47,6 +47,14 @@ class NcFilter(object):
             np.zeros(dimensions, dtype=np.dtype(dtyp)),
             mask=True)})
 
+    def _get_var(self, varname):
+        return(self.variables[self._getvarnames().index(varname)])
+
+    def _get_dimshape(self, varname):
+        dimshape = tuple([self.dims[dimname]
+                          for dimname in self._get_var(varname)['dimensions']])
+        return(dimshape)
+
     def write(self, outfile):
         '''
         Creates <outfile> with meta-data as in
@@ -140,8 +148,7 @@ class NcFilter(object):
 
     def modify_variable_data(self, newdata):
         '''
-        (str) varname:  Name of variable.
-        (dict) newdata: new data.
+        (dict) newdata: new data as {<varname>: numpy.array, ...}
         Attaches <newdata> to <varname>.
         '''
         v_undef = list(set(newdata.keys()) - set(self._getvarnames()))
@@ -150,8 +157,19 @@ class NcFilter(object):
             print("WARNING: data attached to non-existing variables {}"
                   .format(v_undef))
         if v_def:
-            print("WARNING: Overwriting data of variable(s): {}".format(v_def))
-        # TODO: check for wrong dimensions.
+            shapes_expect = [(varname,
+                              self._get_dimshape(varname),
+                              newdata[varname].shape,
+                              self._get_var(varname)['dtype'],
+                              newdata[varname].dtype) for varname in v_def]
+            mismatch = [x[0] for x in shapes_expect if x[1] != x[2]]
+            if mismatch:
+                print("WARNING: Dimension mismatch for variables: {}"
+                      .format(mismatch))
+            mismatch = [x[0] for x in shapes_expect if x[3] != x[4]]
+            if mismatch:
+                print("WARNING: Datatype mismatch for variables: {}"
+                      .format(mismatch))
         self.newdata.update(newdata)
         return(self)
 
