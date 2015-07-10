@@ -15,44 +15,38 @@ class NcFilter(object):
         into reasonable data-structures.
         '''
         self.origin = origin
-        self.dsin = Dataset(origin, 'r')
-        # Global attributes
-        self.glob_atts = OrderedDict([(x, self.dsin.getncattr(x))
-                                      for x in self.dsin.ncattrs()])
-        # Dimensions
-        dim_sizes = [None if x.isunlimited() else len(x)
-                     for x in self.dsin.dimensions.values()]
-        self.dims = OrderedDict(zip(self.dsin.dimensions.keys(), dim_sizes))
-        # variables
-        # All keys have to be present! In case of no attributes use empty dict.
-        self.variables = [{'name': x.name,
-                           'dtype': x.dtype,
-                           'dimensions': x.dimensions,  # tuple
-                           'attributes': self._get_var_attrs(x)}
-                          for x in self.dsin.variables.values()]
+        with Dataset(origin, 'r') as dsin:
+            # Global attributes
+            self.glob_atts = OrderedDict([(x, dsin.getncattr(x))
+                                          for x in dsin.ncattrs()])
+            # Dimensions
+            dim_sizes = [None if x.isunlimited() else len(x)
+                         for x in dsin.dimensions.values()]
+            self.dims = OrderedDict(zip(dsin.dimensions.keys(), dim_sizes))
+            # variables
+            # All keys have to be present! In case of no attributes use empty dict.
+            self.variables = OrderedDict([(x.name, {
+                'dtype': x.dtype,
+                'dimensions': x.dimensions,  # tuple
+                'attributes': self._get_var_attrs(x)})
+                for x in dsin.variables.values()])
         self.newdata = {}
-        self.dsin.close()
 
     def _get_var_attrs(self, v):
         return(OrderedDict([(x, v.getncattr(x)) for x in v.ncattrs()]))
 
-    def _getvarnames(self):
-        return([v['name'] for v in self.variables])
-
     def _get_origin_values(self, varname):
-        return(self.dsin.variables['varname'][:])
+        with Dataset(self.origin, 'r') as ds:
+            return(ds.variables[varname][:])
 
     def _mk_empty_data(self, varname, dimensions, dtyp):
         return({varname: np.ma.MaskedArray(
             np.zeros(dimensions, dtype=np.dtype(dtyp)),
             mask=True)})
 
-    def _get_var(self, varname):
-        return(self.variables[self._getvarnames().index(varname)])
-
-    def _get_dimshape(self, varname):
+    def _get_dimshape(self, varnam):
         dimshape = tuple([self.dims[dimname]
-                          for dimname in self._get_var(varname)['dimensions']])
+                          for dimname in self.variables[varnam]['dimensions']])
         return(dimshape)
 
     def write(self, outfile):
@@ -71,8 +65,10 @@ class NcFilter(object):
         # sanity checks
         if not (type(self.newdata) == dict):
             sys.exit("<self.newdata> has to be a dictionary")
-        if not set(self.newdata.keys()) <= set(self._getvarnames()):
-            sys.exit("<self.newdata> has not defined variable names")
+        if not set(self.newdata.keys()) <= set(self.variables.keys()):
+            sys.exit("<self.newdata> has undefined variable names: {}"
+                     .format(set(self.newdata.keys())
+                             .intersection(set(self.variables.keys()))))
 
         # write global attributes
         dsout.setncatts(self.glob_atts)
@@ -82,18 +78,16 @@ class NcFilter(object):
             dsout.createDimension(dnam, dsiz)
 
         # define variables (meta only)
-        for v in self.variables:
-            #print("name: {}  dtype: {}".format(v['name'], v['dtype']))
-            vout = dsout.createVariable(v['name'], v['dtype'],
+        for vn, v in self.variables.iteritems():
+            vout = dsout.createVariable(vn, v['dtype'],
                                         dimensions=v['dimensions'])
             vout.setncatts(v['attributes'])
 
         # variables to be identically copied (data):
-        vcp = set(self._getvarnames()) - set(self.newdata.keys())
-        self.dsin = Dataset(self.origin, "r")
-        for v in vcp:
-            dsout.variables[v][:] = self.dsin.variables[v][:]
-        self.dsin.close()
+        vcp = set(self.variables.keys()) - set(self.newdata.keys())
+        with Dataset(self.origin, "r") as dsin:
+            for v in vcp:
+                dsout.variables[v][:] = dsin.variables[v][:]
 
         # variables with new data
         for v in self.newdata.keys():
@@ -101,7 +95,7 @@ class NcFilter(object):
         dsout.close()
 
     def delete_variable(self, varname):
-        del (self.variables[self._getvarnames().index(varname)])
+        del self.variables[varname]
         return(self)
 
     def insert_variable(self, var_dict, data):
@@ -109,7 +103,7 @@ class NcFilter(object):
         <var_dict> is a dictionary as in self.variables.
         <data> is a dictionary {<varname>: numpy.array(...)}
         '''
-        self.variables.append(var_dict)
+        self.variables.update(var_dict)
         self.newdata.update(data)
         return(self)
 
@@ -129,21 +123,20 @@ class NcFilter(object):
         already present, and the data will be set to a properly sized
         array filled with _FillValue.
         '''
-        varidx = self._getvarnames().index(varname)
-        self.variables[varidx]['attributes'].update(newattributes)
+        self.variables[varname]['attributes'].update(newattributes)
         if newdtype:
             assert(type(newdtype) == np.dtype)
-            self.variables[varidx]['dtype'] = newdtype
+            self.variables[varname]['dtype'] = newdtype
         if newdims:
             assert(type(newdims) == OrderedDict)
             missdims = set(newdims) - set(self.dims)
             self.dims.update([(d, newdims[d]) for d in missdims])
             newdimnames = tuple(newdims.keys())
-            self.variables[varidx]['dimensions'] = newdimnames
+            self.variables[varname]['dimensions'] = newdimnames
             newdimsizes = tuple(newdims.values())
             self.newdata.update(
                 self._mk_empty_data(varname, newdimsizes,
-                                    self.variables[varidx]['dtype']))
+                                    self.variables[varname]['dtype']))
         return(self)
 
     def modify_variable_data(self, newdata):
@@ -151,20 +144,26 @@ class NcFilter(object):
         (dict) newdata: new data as {<varname>: numpy.array, ...}
         Attaches <newdata> to <varname>.
         '''
-        v_undef = list(set(newdata.keys()) - set(self._getvarnames()))
-        v_def = list(set(newdata.keys()) & set(self._getvarnames()))        
+        v_undef = list(set(newdata.keys()) - set(self.variables.keys()))
+        v_def = list(set(newdata.keys()) & set(self.variables.keys()))       
         if v_undef:
             print("WARNING: data attached to non-existing variables {}"
                   .format(v_undef))
         if v_def:
+            # set unlimited dimensions to None
             shapes_expect = [(varname,
                               self._get_dimshape(varname),
                               newdata[varname].shape,
-                              self._get_var(varname)['dtype'],
+                              self.variables[varname]['dtype'],
                               newdata[varname].dtype) for varname in v_def]
-            mismatch = [x[0] for x in shapes_expect if x[1] != x[2]]
+            print(shapes_expect)
+#############################################
+# compare only dimension elements where shapes_expect[1] has not a None
+            # mismatch = [x[0] for x in shapes_expect if (x[1] is not None and
+            #                                             x[1] != x[2])]
+# ##########################################
             if mismatch:
-                print("WARNING: Dimension mismatch for variables: {}"
+                print("WARNING: Dimension mismatch for variables: {}."
                       .format(mismatch))
             mismatch = [x[0] for x in shapes_expect if x[3] != x[4]]
             if mismatch:
@@ -173,45 +172,54 @@ class NcFilter(object):
         self.newdata.update(newdata)
         return(self)
 
-    def _compress_prep(self, varname):
+
+class Compress(NcFilter):
+    def __init__(self, origin):
+        super(Compress, self).__init__(origin)
+        self.outResolutionShort = 2.0**16 - 2
+        self.outResolutionLong = 2.0**32 - 2
+
+    def _compress_prep(self, vname):
         '''
-        Prepare lossy compression of variable <v>.
+        Prepare lossy compression of variable <vname>.
         Check range, computed offset and scaling, and check if variable is
         well behaved (short integer ok) or highly skewed (long integer necessary).
         Return parameters for compressing.
         '''
-        outResolutionShort = 2.0**16 - 2
-        outResolutionLong = 2.0**32 - 2
-        v = Dataset(self.origin, 'r').variables[varname][:]
+        v = self._get_origin_values(vname)
         minVal = np.min(v[:])
         maxVal = np.max(v[:])
         meanVal = np.mean(v[:])
-        if np.min(meanVal - minVal,
-                  maxVal - meanVal) < (maxVal - minVal) / 1000:
+        if np.min([meanVal - minVal,
+                   maxVal - meanVal]) < (maxVal - minVal) / 1000.:
             intType = np.dtype('uint32')
-            outres = outResolutionLong
+            outres = self.outResolutionLong
             fillval = np.uint32(2**32 - 1)
         else:
             intType = np.dtype('uint16')
-            outres = outResolutionShort
+            outres = self.outResolutionShort
             fillval = np.uint16(2**16 - 1)
         return(minVal, meanVal, maxVal, v.dtype, intType, outres, fillval)
-        # print("Packing variable {} [min:{}, mean:{}, max:{}] <{}> into <{}>"
-        #       .format(v.name, minVal, meanVal, maxVal, v.dtype, intType))
+
+    def _update_history_att(self):
+        newhistory = (datetime.datetime.now().ctime() +
+                      ': ' + ' '.join(sys.argv))
+        try:
+            newatt = "{}\n{}".format(newhistory, self.glob_atts['history'])
+            #  separating new entries with "\n" because there is an undocumented
+            #  feature in ncdump that will make it look like the attribute is an
+            #  array of strings, when in fact it is not.
+        except AttributeError:
+            newatt = newhistory
+        self.glob_atts['history'] = newatt
+
+
+
+    
 
 
     # def compress(self):
-    #     def _update_history_att():
-    #         thishistory = (datetime.datetime.now().ctime() +
-    #                        ': ' + ' '.join(sys.argv))
-    #         try:
-    #             newatt = "{}\n{}".format(thishistory, self.glob_atts('history'))
-    #             #  separating new entries with "\n" because there is an undocumented
-    #             #  feature in ncdump that will make it look like the attribute is an
-    #             #  array of strings, when in fact it is not.
-    #         except AttributeError:
-    #             newatt = thishistory
-    #         self.glob_atts['history'] = newatt
+    #     
 
     #         def _select_vars():
     #             '''Select variables that are going to be packed'''

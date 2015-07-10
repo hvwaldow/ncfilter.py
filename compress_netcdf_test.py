@@ -41,12 +41,12 @@ class NcFilter_Test():
         ds2.close()
 
     def write_data_newvar_test(self):
-        self.P.variables.append({'name': 'newvar',
-                                 'dtype': 'int',
-                                 'dimensions': ('newdim1',
-                                                'newdim2',
-                                                'newdim3'),
-                                 'attributes': {}})
+        self.P.variables.update({'newvar': {
+            'dtype': 'int',
+            'dimensions': ('newdim1',
+                           'newdim2',
+                           'newdim3'),
+            'attributes': {}}})
         self.P.dims['newdim1'] = 2
         self.P.dims['newdim2'] = 3
         self.P.dims['newdim3'] = 4
@@ -67,9 +67,11 @@ class NcFilter_Test():
     def insert_variable_test(self):
         newdims = {'newdim1': 4, 'newdim2': 5, 'newdim3': 6}
         self.P.insert_dimensions(newdims)
-        var_dict = {'name': 'testinsert', 'dtype': float,
-                    'dimensions': ('newdim1', 'newdim2', 'newdim3'),
-                    'attributes': {'att1': 1, 'att2': 'two', 'att3': 3.01}}
+        var_dict = {'testinsert': {
+            'dtype': float,
+            'dimensions': ('newdim1', 'newdim2', 'newdim3'),
+            'attributes': {'att1': 1, 'att2': 'two', 'att3': 3.01}}
+        }
         data = {'testinsert': np.random.randn(4, 5, 6)}
         self.P.insert_variable(var_dict, data).write(TESTOUT)
         d1 = Dataset(TESTOUT, 'r')
@@ -135,6 +137,46 @@ class NcFilter_Test():
         print(ds1, ds2, ds3)
         assert(ds1 == (None, 190, 174) and ds2 == (None, )
                and ds3 == (174, ))
+
+    def _get_origin_values_test(self):
+        pr = self.P._get_origin_values('pr')
+        pr1 = Dataset(TESTIN, 'r').variables['pr'][:]
+        assert(np.all(pr == pr1))
+
+
+import scipy.stats as scst
+class Compress_Test():
+    def setUp(self):
+        try:
+            os.remove(TESTOUT)
+        except OSError:
+            pass
+        assert not os.path.exists(TESTOUT)
+        self.C = Compress(TESTIN)
+
+    def _compress_prep_small_test(self):
+        ret = self.C._compress_prep('pr')
+        v1 = self.C._get_origin_values('pr')
+        des = scst.describe(v1, axis=None)
+        # print(ret)
+        # print(des)
+        assert(ret == (des.minmax[0], des.mean, des.minmax[1], v1.dtype,
+                       np.dtype('uint16'), 2.0**16 - 2, np.uint16(2**16 - 1)))
+
+    def _compress_prep_big_test(self):
+        v1 = self.C._get_origin_values('pr')
+        des = scst.describe(v1, axis=None)
+        repmax = 1000 * des.mean - 999 * des.minmax[0] + 1
+        v1.flat[np.argmax(v1)] = repmax
+        newdata = {'pr': v1}
+        self.C.modify_variable_data(newdata).write(TESTOUT)
+        C1 = Compress(TESTOUT)
+        ret = C1._compress_prep('pr')
+        v1 = C1._get_origin_values('pr')
+        des = scst.describe(v1, axis=None)
+        assert(ret == (des.minmax[0], des.mean, des.minmax[1], v1.dtype,
+                       np.dtype('uint32'), 2.0**32 - 2, np.uint32(2**32 - 1)))
+        
 
     # def _compress_prep_test(self):
     #     d_skewed =
