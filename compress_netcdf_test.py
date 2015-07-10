@@ -1,9 +1,11 @@
 from compress_netcdf import *
 from nose.tools import *
 import os
+import gzip
+from urllib2 import urlopen
 
-TESTIN = 'test_unpacked_w.nc'
-TESTOUT = 'test_packed.nc'
+TESTIN = 'DMI-HIRHAM5_A1B_ARPEGE_MM_25km_pr.nc'
+TESTOUT = 'testout.nc'
 
 
 class NcFilter_Test():
@@ -14,10 +16,27 @@ class NcFilter_Test():
         except OSError:
             pass
         assert not os.path.exists(TESTOUT)
+        if not os.path.exists(TESTIN):
+            blk = 2**20
+            print('Downloading testfile ...'),
+            f_rem = urlopen('http://ensemblesrt3.dmi.dk/data/A1B/DMI/MM/'
+                            + TESTIN + '.gz')
+            with open(TESTIN + '.gz', 'w') as fout:
+                while True:
+                    block = f_rem.read(blk)
+                    if not block:
+                        break
+                    fout.write(block)
+            print(' finished!')
+            with gzip.open(TESTIN + '.gz', 'r') as f_in:
+                f_out = open(TESTIN, 'w')
+                while True:
+                    block = f_in.read(blk)
+                    if not block:
+                        break
+                    f_out.write(block)
+                f_out.close()
         self.P = NcFilter(TESTIN)
-
-    def no_test(self):
-        pass
 
     def write_meta_test(self):
         self.P.write(TESTOUT)
