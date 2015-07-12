@@ -162,8 +162,24 @@ class NcFilter_Test():
         pr1 = Dataset(TESTIN, 'r').variables['pr'][:]
         assert(np.all(pr == pr1))
 
+    def update_history_att_test(self):
+        self.P.glob_atts['history'] = "oldhistory attribute"
+        newhistory = (datetime.datetime.now().ctime() +
+                      ': ' + ' '.join(sys.argv))
+        self.P.update_history_att()
+        assert(self.P.glob_atts['history']
+               == "{}\n{}".format(newhistory, "oldhistory attribute"))
+        del self.P.glob_atts['history']
+        newhistory = (datetime.datetime.now().ctime() +
+                      ': ' + ' '.join(sys.argv))
+        self.P.update_history_att()
+        assert(self.P.glob_atts['history'] == newhistory)
+
+
 
 import scipy.stats as scst
+
+
 class Compress_Test():
     def setUp(self):
         try:
@@ -209,6 +225,15 @@ class Compress_Test():
 
     # def compress_test(self):
     #     raise Exception
+
+
+
+
+
+
+
+
+
 
 
 
