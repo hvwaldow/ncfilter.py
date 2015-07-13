@@ -5,6 +5,7 @@ import datetime
 from collections import OrderedDict
 import numpy as np
 from netCDF4 import Dataset
+import logging
 
 
 class NcFilter(object):
@@ -186,38 +187,38 @@ class NcFilter(object):
         self.glob_atts['history'] = newatt
         return(self)
 
-    # def _find_coordinate_variables(self, dimension=None, type=None):
-    #     '''
-    #     Returns all variable names that represent coordinates. Restrict
-    #     to time, easting, northing by specifying
-    #       dimension='T',
-    #       dimension='Z',
-    #       dimension='X',
-    #       dimension='Y',
-    #     respectively.
-    #     Specify
-    #       <type>='dim'
-    #     to get only dimension variables, or
-    #       <type>='aux'
-    #     to get only auxiliary coordinate variables.
-    #     '''
-    #     def isT(v):
-    #         print(v.name)
-    #         try:
-    #             if v.getncattr('axis') == 'T':
-    #                 return(True)
-    #         except:
-    #             pass
-    #         try:
-    #             if (v.getncattr('units').split(' ')[0]
-    #                 in ['common_year', 'common_years', 'year', 'years', 'yr', 'a', 'month', 'months', 'week',
-    #                     'weeks', 'day', 'days', 'd', 'hour', 'hours', 'hr',
-    #                     'h', 'minute', 'minutes', 'min', 'second', 'seconds',
-    #                     's', 'sec']):
-    #                 return(True)
-    #         except:
-    #             pass
-    #         return(False)
+    def _find_coordinate_variables(self, dimension=None, type=None):
+        '''
+        Returns all variable names that represent coordinates. Restrict
+        to time, easting, northing by specifying
+          dimension='T',
+          dimension='Z',
+          dimension='X',
+          dimension='Y',
+        respectively.
+        Specify
+          <type>='dim'
+        to get only dimension variables, or
+          <type>='aux'
+        to get only auxiliary coordinate variables.
+        '''
+        def isT(v):
+            print(v.name)
+            try:
+                if v.getncattr('axis') == 'T':
+                    return(True)
+            except:
+                pass
+            try:
+                if (v.getncattr('units').split(' ')[0]
+                    in ['common_year', 'common_years', 'year', 'years', 'yr', 'a', 'month', 'months', 'week',
+                        'weeks', 'day', 'days', 'd', 'hour', 'hours', 'hr',
+                        'h', 'minute', 'minutes', 'min', 'second', 'seconds',
+                        's', 'sec']):
+                    return(True)
+            except:
+                pass
+            return(False)
 
         
 
@@ -249,6 +250,33 @@ class Compress(NcFilter):
             outres = self.outResolutionShort
             fillval = np.uint16(2**16 - 1)
         return(minVal, meanVal, maxVal, v.dtype, intType, outres, fillval)
+
+    def _find_compressible_variables(self):
+        ''' Returns variable names that are not thought to be coordinate variables'''
+        
+        # It is quite difficult to properly identify the coordinate variables
+        # assuming CF-Conventions (1.6) only. Therefore assume all 1-D variables
+        # need not be compressed.
+        logging.debug("***********TEST LOLG***************")
+        print('')
+        print("***********************\n In Main\n**********************")
+        print('')
+        # exclude_coord = [varname for varname in self.variables if
+        #                  len(self.variables[varname]['dimensions']) == 1]
+        # print("\n exclude_ccord = {}".format(exclude_coord))
+        # exclude_aux_coords = []
+        # for sl in [self.variables[vname]['attributes']
+        #            .get('coordinates').split()
+        #            for vname in self.variables]:
+        #     for cnam in sl:
+        #         exclude_aux_coords.append(cnam)
+        # return((exclude_coord, exclude_aux_coords))
+
+        
+        
+
+        
+        
 
 
 

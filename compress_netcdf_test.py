@@ -211,6 +211,15 @@ class Compress_Test():
         des = scst.describe(v1, axis=None)
         assert(ret == (des.minmax[0], des.mean, des.minmax[1], v1.dtype,
                        np.dtype('uint32'), 2.0**32 - 2, np.uint32(2**32 - 1)))
+
+    def _find_compressible_variables_test(self):
+        compvars = self.C._find_coordinate_variables()
+        print('')
+        print("In Test")
+        print('')
+        #print("\n returned: {}".format(compvars))
+        # raise Exception
+        
         
 
     # def _compress_prep_test(self):
