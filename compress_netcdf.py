@@ -4,8 +4,7 @@ import argparse
 import datetime
 from collections import OrderedDict
 import numpy as np
-from netCDF4 import Dataset
-import logging
+from netCDF4 import Dataset, Variable
 
 
 class NcFilter(object):
@@ -26,10 +25,15 @@ class NcFilter(object):
             self.dims = OrderedDict(zip(dsin.dimensions.keys(), dim_sizes))
             # variables
             # All keys have to be present! In case of no attributes use empty dict.
+            # 'flags' is an OrderedDict with netCDF4.Variable methods as keys
+            # and a list of arguments.
+            # E.g. {Datset.Variable.set_auto_mask: [True]}
             self.variables = OrderedDict([(x.name, {
                 'dtype': x.dtype,
                 'dimensions': x.dimensions,  # tuple
-                'attributes': self._get_var_attrs(x)})
+                'attributes': self._get_var_attrs(x),
+                'flags': OrderedDict(),
+                'createargs': OrderedDict()})
                 for x in dsin.variables.values()])
         self.newdata = {}
 
@@ -81,8 +85,11 @@ class NcFilter(object):
         # define variables (meta only)
         for vn, v in self.variables.iteritems():
             vout = dsout.createVariable(vn, v['dtype'],
-                                        dimensions=v['dimensions'])
+                                        dimensions=v['dimensions'],
+                                        **v['createargs'])
             vout.setncatts(v['attributes'])
+            for f in v['flags'].iteritems():
+                getattr(vout, f[0])(*f[1])
 
         # variables to be identically copied (data):
         vcp = set(self.variables.keys()) - set(self.newdata.keys())
@@ -123,9 +130,16 @@ class NcFilter(object):
         In case newdims are given, these dimensions are created if not
         already present, and the data will be set to a properly sized
         array filled with _FillValue.
+
+        The remaining named parameters **newattributes update (i.e. append
+        and / overwrite the attributes of <varname>. A named parameter wit
+        value = None will result in the deletion of the attribute.
         '''
         self.variables[varname]['attributes'].update(newattributes)
-        if newdtype:
+        for atnam, atval in self.variables[varname]['attributes'].items():
+            if atval is None:
+                del self.variables[varname]['attributes'][atnam]
+        if newdtype is not None:
             assert(type(newdtype) == np.dtype)
             self.variables[varname]['dtype'] = newdtype
         if newdims:
@@ -146,7 +160,7 @@ class NcFilter(object):
         Attaches <newdata> to <varname>.
         '''
         v_undef = list(set(newdata.keys()) - set(self.variables.keys()))
-        v_def = list(set(newdata.keys()) & set(self.variables.keys()))       
+        v_def = list(set(newdata.keys()) & set(self.variables.keys()))
         if v_undef:
             print("WARNING: data attached to non-existing variables {}"
                   .format(v_undef))
@@ -157,12 +171,11 @@ class NcFilter(object):
                               newdata[varname].shape,
                               self.variables[varname]['dtype'],
                               newdata[varname].dtype) for varname in v_def]
-            print(shapes_expect)
-#############################################
-# compare only dimension elements where shapes_expect[1] has not a None
-            # mismatch = [x[0] for x in shapes_expect if (x[1] is not None and
-            #                                             x[1] != x[2])]
-# ##########################################
+            mismatch = []
+            for m in shapes_expect:
+                if ((m[1] != m[2] and m[1] is not None and m[2] is not None)
+                    or m[3] != m[4]):
+                    mismatch.append(m[0])
             if mismatch:
                 print("WARNING: Dimension mismatch for variables: {}."
                       .format(mismatch))
@@ -187,40 +200,45 @@ class NcFilter(object):
         self.glob_atts['history'] = newatt
         return(self)
 
-    def _find_coordinate_variables(self, dimension=None, type=None):
-        '''
-        Returns all variable names that represent coordinates. Restrict
-        to time, easting, northing by specifying
-          dimension='T',
-          dimension='Z',
-          dimension='X',
-          dimension='Y',
-        respectively.
-        Specify
-          <type>='dim'
-        to get only dimension variables, or
-          <type>='aux'
-        to get only auxiliary coordinate variables.
-        '''
-        def isT(v):
-            print(v.name)
-            try:
-                if v.getncattr('axis') == 'T':
-                    return(True)
-            except:
-                pass
-            try:
-                if (v.getncattr('units').split(' ')[0]
-                    in ['common_year', 'common_years', 'year', 'years', 'yr', 'a', 'month', 'months', 'week',
-                        'weeks', 'day', 'days', 'd', 'hour', 'hours', 'hr',
-                        'h', 'minute', 'minutes', 'min', 'second', 'seconds',
-                        's', 'sec']):
-                    return(True)
-            except:
-                pass
-            return(False)
+    # def _parse_cmd(self):
+    #     parser = argparse.ArgumentParser(description='Compress a netcdf file by ' +
+    #     'first converting float32 and float64 type2D ,3D and 4D fields into ' +
+    #     'integers with offset and scaling factor and then compressing with zlib ' +
+    #     'compression.')
+    #     parser.add_argument('-o', dest='fout',
+    #                         help='compressed netcdf file', metavar='OUTFILE')
+    #     parser.add_argument('-W', default=False, action='store_true',
+    #                         dest='overwrite', help='replace input file, ' +
+    #                         'overrides -o option.')
+    #     parser.add_argument('fin', help='input file', metavar='INFILE')
+    #     args = vars(parser.parse_args())
 
-        
+    #     # check input file
+    #     fin = os.path.realpath(args['fin'])
+    #     if not os.path.exists(fin):
+    #         parser.error('input file {} does not exist.'.format(fin))
+    #     dir_in = os.path.dirname(fin)
+
+    #     # check output file
+    #     if args['overwrite']:
+    #         fout = fin + '.tmp'
+    #     else:
+    #         try:
+    #             # output file specified
+    #             fout = os.path.realpath(args['fout'])
+    #             if not os.path.exists(os.path.dirname(fout)):
+    #                 parser.error('path to output file {} does not exist.'
+    #                              .format(fout))
+    #         except AttributeError:
+    #             # no output file specified
+    #             dir_out = os.path.join(dir_in, 'compress')
+    #             if not os.path.exists(dir_out):
+    #                 print('creating {}'.format(dir_out))
+    #                 os.mkdir(dir_out)
+    #             fout = os.path.join(dir_out, os.path.basename(fin))
+    #     return((fin, fout, args['overwrite']))
+       # self.fin, self.fout, self.overwrite = self.parse_cmd()
+       # self.dsout = Dataset(self.fout, 'w')
 
 
 class Compress(NcFilter):
@@ -249,245 +267,81 @@ class Compress(NcFilter):
             intType = np.dtype('uint16')
             outres = self.outResolutionShort
             fillval = np.uint16(2**16 - 1)
-        return(minVal, meanVal, maxVal, v.dtype, intType, outres, fillval)
+        # scale factor = 1 if maxVal == minVal
+        scale_factor = (maxVal - minVal) / outres or 1
+        return(minVal, meanVal, maxVal, scale_factor, outres, intType, fillval)
 
     def _find_compressible_variables(self):
-        ''' Returns variable names that are not thought to be coordinate variables'''
-        
+        ''' Returns variable names that are not thought
+        to be coordinate variables'''
+
         # It is quite difficult to properly identify the coordinate variables
         # assuming CF-Conventions (1.6) only. Therefore assume all 1-D variables
         # need not be compressed.
-        logging.debug("***********TEST LOLG***************")
-        print('')
-        print("***********************\n In Main\n**********************")
-        print('')
-        # exclude_coord = [varname for varname in self.variables if
-        #                  len(self.variables[varname]['dimensions']) == 1]
-        # print("\n exclude_ccord = {}".format(exclude_coord))
-        # exclude_aux_coords = []
-        # for sl in [self.variables[vname]['attributes']
-        #            .get('coordinates').split()
-        #            for vname in self.variables]:
-        #     for cnam in sl:
-        #         exclude_aux_coords.append(cnam)
-        # return((exclude_coord, exclude_aux_coords))
+        # exclude proper coordinate variables (1-dimensional)
+        exclude_coord = [varname for varname in self.variables if
+                         len(self.variables[varname]['dimensions']) <= 1]
+        # exclude auxiliary coordinates and cell-bounds
+        exclude_aux_coords = []
+        for atts in [v['attributes'] for v in self.variables.values()]:
+            auxcoords = atts.get('coordinates') or ''
+            auxcoords += ' ' + (atts.get('bounds') or '')
+            exclude_aux_coords.extend(auxcoords.split())
+        # for good measure exclude variable names from Dominik's list
+        exclude_dom = ['lon', 'lat', 'slon', 'slat', 'slonu', 'slatu', 'slonv',
+                       'slatv', 'time', 'time_bnds', 'rlon', 'rlat',
+                       'level_bnds', 'level', 'levels']
+        # also exclude variables of wrong datatype
+        exclude_dtyp = []
+        comp_dtyp = [np.dtype(x) for x in ['float64', 'float32',
+                                           'uint32', 'uint16']]
+        for vn, v in self.variables.iteritems():
+            if v['dtype'] not in comp_dtyp:
+                exclude_dtyp.append(vn)
+        exclude_all = exclude_coord + exclude_aux_coords + \
+                      exclude_dom  + exclude_dtyp
+        exclude_all = list(OrderedDict.fromkeys(exclude_all))  # make unique
+        compressible = [v for v in self.variables if v not in exclude_all]
+        return((compressible, exclude_all))
 
-        
-        
+    def _calc_chunksizes(self, varname):
+        # choose chunksize: The horizontal domain (last 2 dimensions)
+        # is one chunk. That the last 2 dimensions span the horizontal
+        # domain is a COARDS convention, which we assume here nonetheless.
+        chu0 = [1] * (len(self.variables[varname]['dimensions']) - 2)
+        chu1 = [self.dims[x] for x in self.variables[varname]['dimensions'][-2:]]
+        chunksizes = chu0 + chu1
+        return(chunksizes)
 
-        
-        
-
-
-
-
-    
-
-
-    # def compress(self):
-    #     
-    #         def _select_vars():
-    #             '''Select variables that are going to be packed'''
-    #             v_sel = [x for x in self.ds.variables.iteritems()
-    #                      if (x[0] not in P.exclude) and
-    #                      (x[1].ndim >= 2) and
-    #                      (x[1].dtype in ['float64', 'float32', 'uint32', 'uint16'])]
-    #             self.selected_vars = v_sel
-
-
-
-
-            
-        
-        
-                                
-    #                  for x in self.dsin.variables.values()]
-    #     for v in self.dsin.variables.itervalues():
-    #         v_new = self.dsout.createVariable(v.name, v.dtype, v.dimensions)
-    #             atts_new = dict([(x, v.getncattr(x)) for x in v.ncattrs()])
-    #             v_new.setncatts(atts_new)
-    #         else:
-    #             v_new = compresshook(v)
-    #         v_new[:] = v[:]
-        
-        
-        
-
-    def parse_cmd(self):
-        parser = argparse.ArgumentParser(description='Compress a netcdf file by ' +
-        'first converting float32 and float64 type2D ,3D and 4D fields into ' +
-        'integers with offset and scaling factor and then compressing with zlib ' +
-        'compression.')
-        parser.add_argument('-o', dest='fout',
-                            help='compressed netcdf file', metavar='OUTFILE')
-        parser.add_argument('-W', default=False, action='store_true',
-                            dest='overwrite', help='replace input file, ' +
-                            'overrides -o option.')
-        parser.add_argument('fin', help='input file', metavar='INFILE')
-        args = vars(parser.parse_args())
-
-        # check input file
-        fin = os.path.realpath(args['fin'])
-        if not os.path.exists(fin):
-            parser.error('input file {} does not exist.'.format(fin))
-        dir_in = os.path.dirname(fin)
-
-        # check output file
-        if args['overwrite']:
-            fout = fin + '.tmp'
-        else:
-            try:
-                # output file specified
-                fout = os.path.realpath(args['fout'])
-                if not os.path.exists(os.path.dirname(fout)):
-                    parser.error('path to output file {} does not exist.'
-                                 .format(fout))
-            except AttributeError:
-                # no output file specified
-                dir_out = os.path.join(dir_in, 'compress')
-                if not os.path.exists(dir_out):
-                    print('creating {}'.format(dir_out))
-                    os.mkdir(dir_out)
-                fout = os.path.join(dir_out, os.path.basename(fin))
-        return((fin, fout, args['overwrite']))
-       # self.fin, self.fout, self.overwrite = self.parse_cmd()
-       # self.dsout = Dataset(self.fout, 'w')
+    def compress(self, complevel=9):
+        for varname in self._find_compressible_variables()[0]:
+            minVal, meanVal, maxVal,\
+                scale_factor, outres, intType, fillval = self._compress_prep(varname)
+            # cast fillval to new integer type
+            fillval = np.array([fillval], dtype=intType)[0]
+            chunksizes = self._calc_chunksizes(varname)
+            # set new dType, set(reset) appropriate attributes
+            self.modify_variable_meta(varname, newdtype=intType,
+                                      scale_factor=scale_factor,
+                                      add_offset=minVal,
+                                      _FillValue=fillval)
+            if 'missing_value' in self.variables[varname]['attributes']:
+                self.modify_variable_meta(varname, missing_value=fillval)
+            # set auto_maskandscale to
+            # 1. automatically transform fill-values and
+            # 2. automatically pack data
+            # self.variables[varname]['flags'] = OrderedDict([(
+            #     'set_auto_maskandscale', [True])])
+            self.variables[varname]['flags'] = OrderedDict([(
+                'set_auto_mask', [True])])
+            # set parameters for netCDF4.Dataset.createVariable 
+            # (zlib-compression and fill-vale)
+            self.variables[varname]['createargs'] = OrderedDict([
+                ('zlib', True), ('complevel', complevel),
+                ('chunksizes', chunksizes), ('fill_value', fillval)])
+            newdata = np.round(self._get_origin_values(varname)).astype(intType)
+            self.modify_variable_data({varname: newdata})
+        return(self)
 
 
-
-
-
-    def cp_all(self, compressvars=None, compresshook=None):
-        '''
-        Copy content of netCDF-structure from self.dsin to self.dsout. Replace
-        variables in <compressvars> with the output of compresshook(<variable>).
-        '''
-        # Global attributes
-        glob_atts = dict([(x, self.dsin.getncattr(x))
-                          for x in self.dsin.ncattrs()])
-        self.dsout.setncatts(glob_atts)
-        # dimensions
-        dim_sizes = [None if x.isunlimited() else len(x)
-                     for x in self.dsin.dimensions.values()]
-        dimensions = zip(self.dsin.dimensions.keys(), dim_sizes)
-        for d in dimensions:
-            self.dsout.createDimension(d[0], size=d[1])
-        # variables
-        for v in self.dsin.variables.itervalues():
-            print("processing variable: {}".format(v.name)),
-            if compressvars is None or v.name not in compressvars:
-                print("copy")
-                v_new = self.dsout.createVariable(v.name, v.dtype, v.dimensions)
-                atts_new = dict([(x, v.getncattr(x)) for x in v.ncattrs()])
-                v_new.setncatts(atts_new)
-            else:
-                v_new = compresshook(v)
-            v_new[:] = v[:]
-
-    def check_values(self, v):
-        '''
-        Checks whether values of <v> are identical for self.dsin
-        and self.dsout.
-        '''
-        assert(np.all(self.dsin.variables[v][:] == self.dsout.variables[v][:]))
-        return("Value check for {} passed.".format(v))
-
-    # def compress(self, v):
-
-    # outResolutionShort = 2.0**16 - 2
-    # outResolutionLong = 2.0**32 - 2  # for unknown reason 2**32 produces wrong results
-    #                                  # try it anyway - hvw
-    # complevel = 9
-
-    # # coordinate variables to prevent from compression even if they are 2D
-    # # TODO automatically find coordinate variables!
-    # exclude = ('lon', 'lat', 'slon', 'slat', 'slonu', 'slatu', 'slonv',
-    #            'slatv', 'time', 'time_bnds', 'rlon', 'rlat', 'level_bnds',
-    #            'level', 'levels')
-
-    #     # check range, computed offset and scaling, and check if variable is
-    #     # well behaved (short integer ok) or highly skewed (long integer necessary)
-    #     minVal = np.min(v[:])
-    #     maxVal = np.max(v[:])
-    #     meanVal = np.mean(v[:])
-    #     if np.min(meanVal - minVal,
-    #               maxVal - meanVal) < (maxVal - minVal) / 1000:
-    #         intType = np.dtype('uint32')
-    #         outres = self.outResolutionLong
-    #         fillval = np.uint32(2**32 - 1)
-    #     else:
-    #         intType = np.dtype('uint16')
-    #         outres = self.outResolutionShort
-    #         fillval = np.uint16(2**16 - 1)
-    #     print("Packing variable {} [min:{}, mean:{}, max:{}] <{}> into <{}>"
-    #           .format(v.name, minVal, meanVal, maxVal, v.dtype, intType))
-
-    #     # choose chunksize: The horizontal domain (last 2 dimensions)
-    #     # is one chunk. That the last 2 dimensions span the horizontal
-    #     # domain is a COARDS convention, which we assume here nonetheless.
-    #     chunksizes = tuple([1]*(len(v.dimensions) - 2) +
-    #                        [len(self.dsin.dimensions[x])
-    #                         for x in v.dimensions[-2:]])
-    #     v_new = self.dsout.createVariable(v.name, intType, v.dimensions,
-    #                                       zlib=True, complevel=self.complevel,
-    #                                       chunksizes=chunksizes,
-    #                                       fill_value=fillval)
-    #     scale_factor = (maxVal - minVal) / outres or 1
-    #     v_new.setncattr('scale_factor', scale_factor)
-    #     v_new.setncattr('add_offset', minVal)
-    #     v_new.setncattr('_FillValue', fillval)
-    #     v_new.set_auto_maskandscale(True)
-    #     # copy untouched attributes
-    #     att_cp = dict([(x, v.getncattr(x)) for x in v.ncattrs()
-    #                    if x not in v_new.ncattrs()])
-    #     v_new.setncatts(att_cp)
-    #     return(v_new)
-
-    def get_coordvars(self, dimension=None, type=None):
-        '''
-        Returns all variable names that represent coordinates. Restrict
-        to time, easting, northing by specifying
-          dimension='T',
-          dimension='Z',
-          dimension='X',
-          dimension='Y',
-        respectively.
-        Specify
-          <type>='dim'
-        to get only dimension variables, or
-          <type>='aux'
-        to get only auxiliary coordinate variables.
-        '''
-        def isT(v):
-            print(v.name)
-            try:
-                if v.getncattr('axis') == 'T':
-                    return(True)
-            except:
-                pass
-            try:
-                if (v.getncattr('units').split(' ')[0]
-                    in ['common_year', 'common_years', 'year', 'years', 'yr', 'a', 'month', 'months', 'week',
-                        'weeks', 'day', 'days', 'd', 'hour', 'hours', 'hr',
-                        'h', 'minute', 'minutes', 'min', 'second', 'seconds',
-                        's', 'sec']):
-                    return(True)
-            except:
-                pass
-            return(False)
-
-        
-
-
-if __name__ == "__main__":
-    P = NcFilter('test_unpacked.nc')
-    P.write('test_packed.nc')
-    #P.dsout.close()
-    # print (P.fin, P.fout, P.overwrite)
-    # P.cp_all(compressvars='pr', compresshook=P.compress)
-    # # print(P.check_values('pr'))
-    # P.dsout.close()
-    # P.dsin.close()
-    
-
-# run compress_netcdf.py test_unpacked.nc -o test_packed.nc
+#if __name__ == "__main__":

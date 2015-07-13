@@ -125,6 +125,13 @@ class NcFilter_Test():
         print(d1.variables['pr'][:].shape)
         assert(d1.variables['pr'][:].shape == newdimshape)
         d1.close()
+    
+    def modify_variable_meta_dtype_test(self):
+        self.P.modify_variable_meta('pr', newdtype=np.dtype('uint16'),
+                                    _FillValue=None, missing_value=None)
+        self.P.write(TESTOUT)
+        d1 = Dataset(TESTOUT, 'r')
+        assert(d1.variables['pr'].dtype == np.dtype('uint16'))
 
     def modify_variable_data_test(self):
         newdata = {'rlat': np.arange(190, dtype='float32')}  # OK
@@ -176,7 +183,6 @@ class NcFilter_Test():
         assert(self.P.glob_atts['history'] == newhistory)
 
 
-
 import scipy.stats as scst
 
 
@@ -195,8 +201,10 @@ class Compress_Test():
         des = scst.describe(v1, axis=None)
         # print(ret)
         # print(des)
-        assert(ret == (des.minmax[0], des.mean, des.minmax[1], v1.dtype,
-                       np.dtype('uint16'), 2.0**16 - 2, np.uint16(2**16 - 1)))
+        assert(ret[0:3] == (des.minmax[0], des.mean, des.minmax[1]))
+        assert(ret[4:7] == (2.0**16 - 2, np.dtype('uint16'),
+                            np.uint16(2**16 - 1)))
+        assert(ret[3] == ((des.minmax[1] - des.minmax[0]) / 2.0**16 - 2) or 1)
 
     def _compress_prep_big_test(self):
         v1 = self.C._get_origin_values('pr')
@@ -209,14 +217,35 @@ class Compress_Test():
         ret = C1._compress_prep('pr')
         v1 = C1._get_origin_values('pr')
         des = scst.describe(v1, axis=None)
-        assert(ret == (des.minmax[0], des.mean, des.minmax[1], v1.dtype,
-                       np.dtype('uint32'), 2.0**32 - 2, np.uint32(2**32 - 1)))
+        assert(ret[0:3] == (des.minmax[0], des.mean, des.minmax[1]))
+        assert(ret[4:7] == (2.0**32 - 2, np.dtype('uint32'),
+                            np.uint32(2**32 - 1)))
+        assert(ret[3] == ((des.minmax[1] - des.minmax[0]) / 2.0**32 - 2) or 1)
 
     def _find_compressible_variables_test(self):
-        compvars = self.C._find_coordinate_variables()
-        print('')
-        print("In Test")
-        print('')
+        compvars, excludevars = self.C._find_compressible_variables()
+        assert(compvars == [u'pr'])
+        assert(excludevars == [u'rlat', u'rlon', u'rotated_pole', u'time',
+                               u'lon', u'lat', u'time_bnds', 'slon', 'slat',
+                               'slonu', 'slatu', 'slonv', 'slatv',
+                               'level_bnds', 'level', 'levels'])
+
+    def _calc_chunksizes_test(self):
+        res = self.C. _calc_chunksizes('pr')
+        assert(res == [1, 190, 174])
+
+    def compress_test(self):
+        cparams = self.C._compress_prep('pr')
+        maxerr = np.abs(0.5 * cparams[3])
+        print("maxerr: {}".format(maxerr))
+        self.C.compress().write(TESTOUT)
+        dout = Dataset(TESTOUT, 'r').variables['pr'][0:100, :]
+        din = Dataset(TESTIN, 'r').variables['pr'][0:100, :]
+        maxdiff = np.max(abs(dout - din))
+        print("maxdiff: {}".format(maxdiff))
+        assert(maxdiff <= maxerr)
+        
+        # self.C.compress()
         #print("\n returned: {}".format(compvars))
         # raise Exception
         
