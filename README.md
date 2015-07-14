@@ -32,9 +32,9 @@ Performs operations on a netCDF file.
 
 positional arguments:
   COMMAND     possible commands: ['compress', 'delvar']
-  ARG         arguments for command
-                  compress compression_level (int)
-                  delvar variable_to_delete (str)
+  ARG         arguments for commands
+                  "compress": ARG = compression_level (int)
+                  "delvar": ARG = variable_to_delete (str)
   INFILE      input file
   OUTFILE     output file
 
