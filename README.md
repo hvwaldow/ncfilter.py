@@ -25,7 +25,7 @@ Dominik Brunner, Empa.
 
 ## Usage:
 
-```bash
+```
 usage: ncfilter.py [-h] COMMAND [ARG [ARG ...]] INFILE OUTFILE
 
 Performs operations on a netCDF file.
