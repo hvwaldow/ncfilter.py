@@ -16,7 +16,7 @@ functionality can be implemented by adding a function to the class
 
 Two commands are implemented exemplarically:
 
-1. The simple `delvar`command deletes a variable.
+1. The simple `delvar` command deletes a variable.
 2. The more complex `compress` packs all suitable variables in a file and saves
    with zip compression.
 
