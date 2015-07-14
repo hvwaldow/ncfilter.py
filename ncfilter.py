@@ -351,7 +351,7 @@ def main():
     parser.add_argument('command', help="possible commands: {}"
                         .format(_get_commands()), metavar='COMMAND')
     parser.add_argument('arguments', help='arguments for commands' +
-                        '\n    "compress": ARG = compression_level (int)' +
+                        '\n    "compress": ARG = compression_level (int), default=9' +
                         '\n    "delvar": ARG = variable_to_delete (str)',
                         metavar="ARG", nargs='*')
     parser.add_argument('fin', help='input file', metavar='INFILE')
