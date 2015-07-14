@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 import sys
 import os
 import argparse
@@ -63,6 +64,10 @@ class NcFilter(object):
         the respective data of <varname> in the original file.
         New <varname>s in <self.newdata> have to be present in <self.variables>.
         '''
+        if self.origin == outfile:
+            origout = outfile
+            outfile += '.tmp'
+            renam = True
         dsout = Dataset(outfile, "w")
         dsout.set_auto_mask(True)
 
@@ -100,6 +105,9 @@ class NcFilter(object):
         for v in self.newdata.keys():
             dsout.variables[v][:] = self.newdata[v][:]
         dsout.close()
+        # replace original file with temporary output
+        if renam:
+            os.rename(outfile, origout)
 
     def delete_variable(self, varname):
         del self.variables[varname]
@@ -261,7 +269,7 @@ class Compress(NcFilter):
             if v['dtype'] not in comp_dtyp:
                 exclude_dtyp.append(vn)
         exclude_all = exclude_coord + exclude_aux_coords + \
-                      exclude_dom  + exclude_dtyp
+                      exclude_dom + exclude_dtyp
         exclude_all = list(OrderedDict.fromkeys(exclude_all))  # make unique
         compressible = [v for v in self.variables if v not in exclude_all]
         return((compressible, exclude_all))
@@ -308,73 +316,63 @@ class Compress(NcFilter):
         return(self)
 
 
-def parse_cmd():
-    def _check_dir_or_make(di):
-        try:
-            os.makedirs(di)
-        except OSError:
-            if not os.path.isdir(di):
-                parser.error("Can't create output directory {}"
-                             .format(di))
+class Commands(object):
 
+    @staticmethod
+    def delvar(argparse):
+        argdict = argparse[0]
+        parser = argparse[1]
+        try:
+            delvar = argdict['arguments'][0]
+        except:
+            parser.error("delvar requires one ARG that names the variable to delete.")
+        NcFilter(argdict['fin']).delete_variable(delvar).write(argdict['fout'])
+
+    @staticmethod
+    def compress(argparse):
+        argdict = argparse[0]
+        parser = argparse[1]
+        try:
+            cl = int(argdict['arguments'][0])
+        except:
+            cl = 9
+        Compress(argdict['fin']).compress(complevel=cl).write(argdict['fout'])
+
+
+def main():
+    def _get_commands():
+        return([m for m in dir(Commands) if not m.startswith('__')])
 
     parser = argparse.ArgumentParser(description='Performs operations' +
-                                     ' on netCDF file.')
-    parser.add_argument('-W', default=False, action='store_true',
-                        dest='overwrite', help='replace input files')
-    parser.add_argument('command', help="possible commands: compress",
-                        metavar='COMMAND')
-    parser.add_argument('fin', help='input file(s)', metavar='INFILE', nargs='+')
-    parser.add_argument('fout', help='output file or directory',
-                        metavar='OUTFILE', nargs=1)
+                                     ' on a netCDF file.',
+                                     epilog='OUTFILE = INFILE will replace the ' +
+                                     'INFILE with the OUTFILE.',
+                                     formatter_class=argparse.RawTextHelpFormatter)
+    parser.add_argument('command', help="possible commands: {}"
+                        .format(_get_commands()), metavar='COMMAND')
+    parser.add_argument('arguments', help='arguments for command' +
+                        '\n    compress compression_level (int)' +
+                        '\n    delvar variable_to_delete (str)',
+                        metavar="ARG", nargs='*')
+    parser.add_argument('fin', help='input file', metavar='INFILE')
+    parser.add_argument('fout', help='output file',
+                        metavar='OUTFILE')
     args = vars(parser.parse_args())
- 
-    # check input files
-    fin = [os.path.realpath(infile) for infile in args['fin']]
-    for f in fin:
-        if not os.path.exists(f):
-            parser.error('input file {} does not exist.'.format(f))
-    # check output file/directory
-    if len(fin) > 1:  # has to be directory
-        _check_dir_or_make(args['fout'])
+
+    # check input file
+    if not os.access(args['fin'], os.R_OK):
+        parser.error("Can't open {} for reading".format(args['fin']))
+
+    # check output file
+    outpath = os.path.dirname(args['fin']) or '.'
+    if not os.access(outpath, os.W_OK):
+        parser.error("can't write output file {}".format(args['fout']))
+
+    # check command
+    if not hasattr(Commands, args['command']):
+        parser.error("Command {} not implemented".format(args['command']))
     else:
-        
-        
+        getattr(Commands, args['command'])([args, parser])
 
-            
-        
-    
-
-
-    # # check output file
-    # if args['overwrite']:
-    #     fout = fin + '.tmp'
-    # else:
-    #     try:
-    #         # output file specified
-    #         fout = os.path.realpath(args['fout'])
-    #         if not os.path.exists(os.path.dirname(fout)):
-    #             parser.error('path to output file {} does not exist.'
-    #                          .format(fout))
-    #     except AttributeError:
-    #         # no output file specified
-    #         dir_out = os.path.join(dir_in, 'compress')
-    #         if not os.path.exists(dir_out):
-    #             print('creating {}'.format(dir_out))
-    #             os.mkdir(dir_out)
-    #         fout = os.path.join(dir_out, os.path.basename(fin))
-    # return((fin, fout, args['overwrite']))
-   # self.fin, self.fout, self.overwrite = self.parse_cmd()
-   # self.dsout = Dataset(self.fout, 'w')
-
-
-
-
-
-# if __name__ == "__main__":
-#     compress()
-
-
-
-
-#if __name__ == "__main__":
+if __name__ == "__main__":
+    main()

@@ -264,27 +264,3 @@ class Compress_Test():
         # plt.hist(diff.ravel(), 50, normed=1, facecolor='green', alpha=0.75)
         # plt.show()
 
-
-def parse_cmd_test():
-    sys.argv = ['compress_netcdf',
-                'DMI-HIRHAM5_A1B_ARPEGE_MM_25km_pr.nc',
-                # 'testout.nc',
-                # 'test_packed.nc',
-                # 'test_unpacked.nc',
-                 'test_unpacked_w.nc',
-                'out']
-    args = parse_cmd()
- 
-
-
-
-
-
-
-
-
-
-
-
-
-
