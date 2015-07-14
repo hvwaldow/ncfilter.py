@@ -1,6 +1,6 @@
-#ncfilter
+#ncfilter.py
 
-A class that allows to create new netCDF files based on the information in an
+A module that allows to create new netCDF files based on the information in an
 already existing one. Has a command-line interface.
 
 The meta-information (everything sans the data proper) is read into an
