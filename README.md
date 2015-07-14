@@ -1,27 +1,18 @@
-#ncfilter.py
+# ncfilter.py
 
-A module that allows to create new netCDF files based on the information in an
-already existing one. Has a command-line interface.
+A module that allows to create new netCDF files based on the information in an already existing one. Has a command-line interface.
 
-The meta-information (everything sans the data proper) is read into an
-internal data-structure in the class `NcFilter`. Methods of this class
-implement various operations on that meta-data.  New actual data can
-be attached to existing or newly created
-variables. `NcFilter.write(outfile)` writes the new netCDF-file.
+The meta-information (everything sans the data proper) is read into an internal data-structure in the class `NcFilter`. Methods of this class implement various operations on that meta-data.  New actual data can be attached to existing or newly created variables. `NcFilter.write(outfile)` writes the new netCDF-file.
 
-New functionality can be added by deriving from `NcFilter` and
-utilizing the helper methods. The comand line interface for new
-functionality can be implemented by adding a function to the class
-`Commands`
+New functionality can be added by deriving from `NcFilter` and utilizing the helper methods. The comand line interface for new functionality can be implemented by adding a function to the class `Commands`.
 
-Two commands are implemented exemplarically:
+Two commands are implemented exemplary:
 
 1. The simple `delvar` command deletes a variable.
 2. The more complex `compress` packs all suitable variables in a file and saves
    with zip compression.
 
-The implementation of the `compress` command is based on a script by
-Dominik Brunner, Empa.
+The implementation of the `compress` command is based on a script by Dominik Brunner, Empa.
 
 ## Usage:
 
@@ -43,4 +34,3 @@ optional arguments:
 
 OUTFILE = INFILE will replace the INFILE with the OUTFILE.
 ```
-
