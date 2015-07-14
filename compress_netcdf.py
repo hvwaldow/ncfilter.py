@@ -4,11 +4,10 @@ import argparse
 import datetime
 from collections import OrderedDict
 import numpy as np
-from netCDF4 import Dataset, Variable
+from netCDF4 import Dataset
 
 
 class NcFilter(object):
-
     def __init__(self, origin):
         '''
         Read all the meta-data of the source file
@@ -86,9 +85,9 @@ class NcFilter(object):
         for vn, v in self.variables.iteritems():
             vout = dsout.createVariable(vn, v['dtype'],
                                         dimensions=v['dimensions'],
-                                        **v['createargs'])
+                                        **v.get('createargs', {}))
             vout.setncatts(v['attributes'])
-            for f in v['flags'].iteritems():
+            for f in v.get('flags', {}).iteritems():
                 getattr(vout, f[0])(*f[1])
 
         # variables to be identically copied (data):
@@ -171,14 +170,17 @@ class NcFilter(object):
                               newdata[varname].shape,
                               self.variables[varname]['dtype'],
                               newdata[varname].dtype) for varname in v_def]
-            mismatch = []
+            mismatch = {}
             for m in shapes_expect:
-                if ((m[1] != m[2] and m[1] is not None and m[2] is not None)
-                    or m[3] != m[4]):
-                    mismatch.append(m[0])
+                if (len(m[1]) != len(m[2]) or
+                    not np.all([x == y or None in [x, y]
+                                for x, y in zip(m[1], m[2])])):
+                    mismatch[m[0]] = (
+                        "WARNING: dimensions don't match: {} vs. {}"
+                        .format(m[1], m[2]))
             if mismatch:
-                print("WARNING: Dimension mismatch for variables: {}."
-                      .format(mismatch))
+                print(mismatch)
+                print("Shapes expect: {}".format(shapes_expect))
             mismatch = [x[0] for x in shapes_expect if x[3] != x[4]]
             if mismatch:
                 print("WARNING: Datatype mismatch for variables: {}"
@@ -199,46 +201,6 @@ class NcFilter(object):
             newatt = newhistory
         self.glob_atts['history'] = newatt
         return(self)
-
-    # def _parse_cmd(self):
-    #     parser = argparse.ArgumentParser(description='Compress a netcdf file by ' +
-    #     'first converting float32 and float64 type2D ,3D and 4D fields into ' +
-    #     'integers with offset and scaling factor and then compressing with zlib ' +
-    #     'compression.')
-    #     parser.add_argument('-o', dest='fout',
-    #                         help='compressed netcdf file', metavar='OUTFILE')
-    #     parser.add_argument('-W', default=False, action='store_true',
-    #                         dest='overwrite', help='replace input file, ' +
-    #                         'overrides -o option.')
-    #     parser.add_argument('fin', help='input file', metavar='INFILE')
-    #     args = vars(parser.parse_args())
-
-    #     # check input file
-    #     fin = os.path.realpath(args['fin'])
-    #     if not os.path.exists(fin):
-    #         parser.error('input file {} does not exist.'.format(fin))
-    #     dir_in = os.path.dirname(fin)
-
-    #     # check output file
-    #     if args['overwrite']:
-    #         fout = fin + '.tmp'
-    #     else:
-    #         try:
-    #             # output file specified
-    #             fout = os.path.realpath(args['fout'])
-    #             if not os.path.exists(os.path.dirname(fout)):
-    #                 parser.error('path to output file {} does not exist.'
-    #                              .format(fout))
-    #         except AttributeError:
-    #             # no output file specified
-    #             dir_out = os.path.join(dir_in, 'compress')
-    #             if not os.path.exists(dir_out):
-    #                 print('creating {}'.format(dir_out))
-    #                 os.mkdir(dir_out)
-    #             fout = os.path.join(dir_out, os.path.basename(fin))
-    #     return((fin, fout, args['overwrite']))
-       # self.fin, self.fout, self.overwrite = self.parse_cmd()
-       # self.dsout = Dataset(self.fout, 'w')
 
 
 class Compress(NcFilter):
@@ -327,21 +289,92 @@ class Compress(NcFilter):
                                       _FillValue=fillval)
             if 'missing_value' in self.variables[varname]['attributes']:
                 self.modify_variable_meta(varname, missing_value=fillval)
-            # set auto_maskandscale to
-            # 1. automatically transform fill-values and
-            # 2. automatically pack data
-            # self.variables[varname]['flags'] = OrderedDict([(
-            #     'set_auto_maskandscale', [True])])
-            self.variables[varname]['flags'] = OrderedDict([(
-                'set_auto_mask', [True])])
+            # setting 'set_suto_scale' to False, (and the packing is done
+            # explicitely, because the automatic
+            # packing truncates to int instead of rounding.
+            self.variables[varname]['flags'] = OrderedDict([
+                ('set_auto_mask', [True]),
+                ('set_auto_scale', [False])])
             # set parameters for netCDF4.Dataset.createVariable 
             # (zlib-compression and fill-vale)
             self.variables[varname]['createargs'] = OrderedDict([
                 ('zlib', True), ('complevel', complevel),
                 ('chunksizes', chunksizes), ('fill_value', fillval)])
-            newdata = np.round(self._get_origin_values(varname)).astype(intType)
+            # pack variable
+            newdata = np.round(
+                (self._get_origin_values(varname) - minVal)
+                / scale_factor).astype(intType)
             self.modify_variable_data({varname: newdata})
         return(self)
+
+
+def parse_cmd():
+    def _check_dir_or_make(di):
+        try:
+            os.makedirs(di)
+        except OSError:
+            if not os.path.isdir(di):
+                parser.error("Can't create output directory {}"
+                             .format(di))
+
+
+    parser = argparse.ArgumentParser(description='Performs operations' +
+                                     ' on netCDF file.')
+    parser.add_argument('-W', default=False, action='store_true',
+                        dest='overwrite', help='replace input files')
+    parser.add_argument('command', help="possible commands: compress",
+                        metavar='COMMAND')
+    parser.add_argument('fin', help='input file(s)', metavar='INFILE', nargs='+')
+    parser.add_argument('fout', help='output file or directory',
+                        metavar='OUTFILE', nargs=1)
+    args = vars(parser.parse_args())
+ 
+    # check input files
+    fin = [os.path.realpath(infile) for infile in args['fin']]
+    for f in fin:
+        if not os.path.exists(f):
+            parser.error('input file {} does not exist.'.format(f))
+    # check output file/directory
+    if len(fin) > 1:  # has to be directory
+        _check_dir_or_make(args['fout'])
+    else:
+        
+        
+
+            
+        
+    
+
+
+    # # check output file
+    # if args['overwrite']:
+    #     fout = fin + '.tmp'
+    # else:
+    #     try:
+    #         # output file specified
+    #         fout = os.path.realpath(args['fout'])
+    #         if not os.path.exists(os.path.dirname(fout)):
+    #             parser.error('path to output file {} does not exist.'
+    #                          .format(fout))
+    #     except AttributeError:
+    #         # no output file specified
+    #         dir_out = os.path.join(dir_in, 'compress')
+    #         if not os.path.exists(dir_out):
+    #             print('creating {}'.format(dir_out))
+    #             os.mkdir(dir_out)
+    #         fout = os.path.join(dir_out, os.path.basename(fin))
+    # return((fin, fout, args['overwrite']))
+   # self.fin, self.fout, self.overwrite = self.parse_cmd()
+   # self.dsout = Dataset(self.fout, 'w')
+
+
+
+
+
+# if __name__ == "__main__":
+#     compress()
+
+
 
 
 #if __name__ == "__main__":

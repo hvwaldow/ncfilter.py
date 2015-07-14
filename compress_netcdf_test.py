@@ -4,6 +4,10 @@ import os
 import gzip
 from urllib2 import urlopen
 
+# import matplotlib as mpl
+# mpl.use('TkAgg')
+# import matplotlib.pyplot as plt
+
 TESTIN = 'DMI-HIRHAM5_A1B_ARPEGE_MM_25km_pr.nc'
 TESTOUT = 'testout.nc'
 
@@ -46,6 +50,17 @@ class NcFilter_Test():
 
     def _comparemeta(self, file2):
         P2 = NcFilter(file2)
+        # add non-required atributes to P2.variables
+        # which get written in any case:
+        for v in self.P.variables.values():
+            try:
+                a = v['createargs']
+            except KeyError:
+                v['createargs'] = OrderedDict()
+            try:
+                a = v['flags']
+            except KeyError:
+                    v['flags'] = OrderedDict()
         return(self.P.glob_atts == P2.glob_atts and
                self.P.dims == P2.dims and
                self.P.variables == P2.variables)
@@ -141,7 +156,8 @@ class NcFilter_Test():
         output = sys.stdout.getvalue().strip()
         assert("WARNING: data attached to non-existing variables ['xx']"
                in output)
-        assert("WARNING: Dimension mismatch for variables: ['lat']" in output)
+        assert("'lat': \"WARNING: dimensions " +
+               "don't match: (190, 174) vs. (3, 3)\"" in output)
         assert("WARNING: Datatype mismatch for variables: ['lat']" in output)
         assert("['rlat']" not in output)
         self.P.newdata = {}
@@ -236,35 +252,29 @@ class Compress_Test():
 
     def compress_test(self):
         cparams = self.C._compress_prep('pr')
+        self.C.compress().write(TESTOUT)
+        dout = Dataset(TESTOUT, 'r').variables['pr'][:]
+        din = Dataset(TESTIN, 'r').variables['pr'][:]
         maxerr = np.abs(0.5 * cparams[3])
         print("maxerr: {}".format(maxerr))
-        self.C.compress().write(TESTOUT)
-        dout = Dataset(TESTOUT, 'r').variables['pr'][0:100, :]
-        din = Dataset(TESTIN, 'r').variables['pr'][0:100, :]
-        maxdiff = np.max(abs(dout - din))
-        print("maxdiff: {}".format(maxdiff))
-        assert(maxdiff <= maxerr)
-        
-        # self.C.compress()
-        #print("\n returned: {}".format(compvars))
-        # raise Exception
-        
-        
-
-    # def _compress_prep_test(self):
-    #     d_skewed =
-
-        
-    # def copy_variable_meta_test(self):#, varname, newname):
-    #     raise Exception
-
-    # def delete_dimensions_test(self):#, dimnames):
-    #     raise Exception
-
-    # def compress_test(self):
-    #     raise Exception
+        diff = dout - din
+        maxdiff = np.max(abs(diff))
+        print("maxrdiff: {}".format(maxdiff))
+        assert(maxdiff <= maxerr + 1e-10)
+        # plt.hist(diff.ravel(), 50, normed=1, facecolor='green', alpha=0.75)
+        # plt.show()
 
 
+def parse_cmd_test():
+    sys.argv = ['compress_netcdf',
+                'DMI-HIRHAM5_A1B_ARPEGE_MM_25km_pr.nc',
+                # 'testout.nc',
+                # 'test_packed.nc',
+                # 'test_unpacked.nc',
+                 'test_unpacked_w.nc',
+                'out']
+    args = parse_cmd()
+ 
 
 
 
