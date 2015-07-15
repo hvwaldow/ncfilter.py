@@ -2,7 +2,7 @@
 
 A module that allows to create new netCDF files based on the information in an already existing one. Has a command-line interface.
 
-The meta-information (everything sans the data proper) is read into an internal data-structure in the class `NcFilter`. Methods of this class implement various operations on that meta-data.  New actual data can be attached to existing or newly created variables. `NcFilter.write(outfile)` writes the new netCDF-file.
+The meta-information (everything except the actual data attached to the variables) is read into an internal data-structure in the class `NcFilter`. Methods of this class implement various operations on that meta-data.  New actual data can be attached to existing or newly created variables. `NcFilter.write(outfile)` writes the new netCDF-file.
 
 New functionality can be added by deriving from `NcFilter` and utilizing the helper methods. The comand line interface for new functionality can be implemented by adding a function to the class `Commands`.
 
