@@ -1,5 +1,5 @@
-from compress_netcdf import *
-from nose.tools import *
+from ncfilter import *
+# from nose.tools import *
 import os
 import gzip
 from urllib2 import urlopen
@@ -12,7 +12,7 @@ TESTIN = 'DMI-HIRHAM5_A1B_ARPEGE_MM_25km_pr.nc'
 TESTOUT = 'testout.nc'
 
 
-class NcFilter_Test():
+class TestNcFilter:
 
     def setUp(self):
         try:
@@ -42,7 +42,7 @@ class NcFilter_Test():
                 f_out.close()
         self.P = NcFilter(TESTIN)
 
-    def write_meta_test(self):
+    def test_write_meta(self):
         self.P.write(TESTOUT)
         assert(self._comparemeta(TESTOUT))
         self.P.glob_atts['fake'] = 1000
@@ -65,7 +65,7 @@ class NcFilter_Test():
                self.P.dims == P2.dims and
                self.P.variables == P2.variables)
 
-    def write_data_cp_test(self):
+    def test_write_data_cp(self):
         self.P.write(TESTOUT)
         ds1 = Dataset(TESTIN, 'r')
         ds2 = Dataset(TESTOUT, 'r')
@@ -199,9 +199,6 @@ class NcFilter_Test():
         assert(self.P.glob_atts['history'] == newhistory)
 
 
-import scipy.stats as scst
-
-
 class Compress_Test():
     def setUp(self):
         try:
@@ -214,29 +211,27 @@ class Compress_Test():
     def _compress_prep_small_test(self):
         ret = self.C._compress_prep('pr')
         v1 = self.C._get_origin_values('pr')
-        des = scst.describe(v1, axis=None)
-        # print(ret)
-        # print(des)
-        assert(ret[0:3] == (des.minmax[0], des.mean, des.minmax[1]))
+        v1max, v1min, v1mean = (v1.max, v1.min, v1.mean)
+        assert(ret[0:3] == (v1min, v1mean, v1max))
         assert(ret[4:7] == (2.0**16 - 2, np.dtype('uint16'),
                             np.uint16(2**16 - 1)))
-        assert(ret[3] == ((des.minmax[1] - des.minmax[0]) / 2.0**16 - 2) or 1)
+        assert(ret[3] == ((v1max - v1min) / 2.0**16 - 2) or 1)
 
     def _compress_prep_big_test(self):
         v1 = self.C._get_origin_values('pr')
-        des = scst.describe(v1, axis=None)
-        repmax = 1000 * des.mean - 999 * des.minmax[0] + 1
+        v1max, v1min, v1mean = (v1.max, v1.min, v1.mean)
+        repmax = 1000 * v1mean - 999 * v1min + 1
         v1.flat[np.argmax(v1)] = repmax
         newdata = {'pr': v1}
         self.C.modify_variable_data(newdata).write(TESTOUT)
         C1 = Compress(TESTOUT)
         ret = C1._compress_prep('pr')
         v1 = C1._get_origin_values('pr')
-        des = scst.describe(v1, axis=None)
-        assert(ret[0:3] == (des.minmax[0], des.mean, des.minmax[1]))
+        v1max, v1min, v1mean = (v1.max, v1.min, v1.mean)
+        assert(ret[0:3] == (v1min, v1mean, v1max))
         assert(ret[4:7] == (2.0**32 - 2, np.dtype('uint32'),
                             np.uint32(2**32 - 1)))
-        assert(ret[3] == ((des.minmax[1] - des.minmax[0]) / 2.0**32 - 2) or 1)
+        assert(ret[3] == ((v1max - v1min) / 2.0**32 - 2) or 1)
 
     def _find_compressible_variables_test(self):
         compvars, excludevars = self.C._find_compressible_variables()

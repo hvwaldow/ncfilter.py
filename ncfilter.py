@@ -10,10 +10,12 @@ from netCDF4 import Dataset
 
 class NcFilter(object):
     def __init__(self, origin):
+
         '''
         Read all the meta-data of the source file
         into reasonable data-structures.
         '''
+
         self.origin = origin
         with Dataset(origin, 'r') as dsin:
             # Global attributes
