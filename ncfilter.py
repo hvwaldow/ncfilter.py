@@ -56,7 +56,7 @@ class NcFilter(object):
                           for dimname in self.variables[varnam]['dimensions']])
         return(dimshape)
 
-    def write(self, outfile):
+    def write(self, outfile, histstring="_undef_"):
         '''
         Creates <outfile> with meta-data as in
           self.glob_atts
@@ -65,6 +65,10 @@ class NcFilter(object):
         Data in self.newdata ( {<varname>: np.array(...), ...} ) replaces
         the respective data of <varname> in the original file.
         New <varname>s in <self.newdata> have to be present in <self.variables>.
+
+        <histstring> will be prepended to the global attribute "history".
+        If no such attribute exists, it will be created.
+        Set histstring=None to leave the attribute untouched. Not recommended!
         '''
         renam = False
         if self.origin == outfile:
@@ -73,6 +77,9 @@ class NcFilter(object):
             renam = True
         dsout = Dataset(outfile, "w")
         dsout.set_auto_mask(True)
+        
+        # add to history attribute
+        self.update_history_att(histstring)
 
         # sanity checks
         if not (type(self.newdata) == dict):
@@ -199,19 +206,34 @@ class NcFilter(object):
         self.newdata.update(newdata)
         return(self)
 
-    def update_history_att(self):
+    def update_history_att(self, newhist="_undef_"):
         '''Precedes current global attribute "history" with date + command'''
-        newhistory = (datetime.datetime.now().ctime() +
-                      ': ' + ' '.join(sys.argv))
+
+        if __name__ == "__main__":
+            newhistory = (datetime.datetime.now().ctime() +
+                          ': ' + ' '.join(sys.argv))
+        elif newhist == "_undef_":
+            print("Warning: No new history attribute given. Using 'unspecified action'")
+            newhistory = (datetime.datetime.now().ctime() +
+                          ': ' + "unspecified action")
+        elif newhist is None:
+            print("Warning: History attribute left unchanged!")
+            return(self)
+        else:
+            newhistory = newhist
         try:
             newatt = "{}\n{}".format(newhistory, self.glob_atts['history'])
-        #  separating new entries with "\n" because there is an undocumented
-        #  feature in ncdump that will make it look like the attribute is an
-        #  array of strings, when in fact it is not.
+            #  separating new entries with "\n" because there is an undocumented
+            #  feature in ncdump that will make it look like the attribute is an
+            #  array of strings, when in fact it is not.
         except KeyError:
             newatt = newhistory
         self.glob_atts['history'] = newatt
         return(self)
+
+    def checkarg(self):
+        print("\nsys.argv: {}".format(sys.argv))
+        print("__name__: {}".format(__name__))
 
 
 class Compress(NcFilter):

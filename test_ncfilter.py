@@ -204,18 +204,20 @@ def test__get_origin_values(ncfilter):
     assert(np.all(pr == pr1))
 
 
-def test_update_history_att(ncfilter):
+def test_update_history_att(ncfilter, capsys):
     ncfilter.glob_atts['history'] = "oldhistory attribute"
-    newhistory = (datetime.datetime.now().ctime() +
-                  ': ' + ' '.join(sys.argv))
+    # no history string given
     ncfilter.update_history_att()
-    assert(ncfilter.glob_atts['history']
-           == "{}\n{}".format(newhistory, "oldhistory attribute"))
-    del ncfilter.glob_atts['history']
-    newhistory = (datetime.datetime.now().ctime() +
-                  ': ' + ' '.join(sys.argv))
-    ncfilter.update_history_att()
-    assert(ncfilter.glob_atts['history'] == newhistory)
+    assert(capsys.readouterr()[0]
+           == "Warning: No new history attribute given. " +
+           "Using 'unspecified action'\n")
+    assert("unspecified action" in ncfilter.glob_atts["history"])
+    ncfilter.glob_atts['history'] = "oldhistory attribute"
+    # history string == None
+    ncfilter.update_history_att(newhist=None)
+    assert(capsys.readouterr()[0]
+           == "Warning: History attribute left unchanged!\n")
+    assert(ncfilter.glob_atts['history'] == "oldhistory attribute")
 
 
 def test__compress_prep_small(compress):
@@ -266,3 +268,15 @@ def test_compress(compress):
     din = Dataset(TESTIN, 'r').variables['pr'][:]
     maxerrnorm = np.max(abs((dout - din) / cparams[3]))
     assert(maxerrnorm <= 0.51)
+
+
+
+
+
+
+
+
+
+
+
+
