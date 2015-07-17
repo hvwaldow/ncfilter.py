@@ -66,6 +66,7 @@ class NcFilter(object):
         the respective data of <varname> in the original file.
         New <varname>s in <self.newdata> have to be present in <self.variables>.
         '''
+        renam = False
         if self.origin == outfile:
             origout = outfile
             outfile += '.tmp'
