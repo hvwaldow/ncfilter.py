@@ -1,0 +1,5 @@
+*.nc.gz
+*.nc
+*.pyc
+__pycache__
+*~
